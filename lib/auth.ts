@@ -148,8 +148,7 @@ const USERNAME_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 export async function registerUser(
   email: string,
   password: string,
-  username: string,
-  name?: string
+  username: string
 ): Promise<{ id: string; username: string }> {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedUsername = username.toLowerCase().trim();
@@ -179,7 +178,6 @@ export async function registerUser(
     const user = await prisma.user.create({
       data: {
         email: normalizedEmail,
-        name: name?.trim() || null,
         passwordHash,
         username: normalizedUsername,
       },
