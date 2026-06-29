@@ -57,23 +57,33 @@ export async function POST(req: Request) {
   }
 
   const base = uuid();
-  // Full: normalize to JPEG (strips metadata). Variants: downscaled.
-  const full = await sharp(input).jpeg({ quality: 85 }).toBuffer();
-  const mobile = await sharp(input)
-    .resize({ width: MOBILE_WIDTH })
-    .jpeg({ quality: 80 })
-    .toBuffer();
-  const thumb = await sharp(input)
-    .resize({ width: THUMB_WIDTH })
-    .jpeg({ quality: 72 })
-    .toBuffer();
+  try {
+    // Full: normalize to JPEG (strips metadata). Variants: downscaled.
+    const full = await sharp(input).jpeg({ quality: 85 }).toBuffer();
+    const mobile = await sharp(input)
+      .resize({ width: MOBILE_WIDTH })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    const thumb = await sharp(input)
+      .resize({ width: THUMB_WIDTH })
+      .jpeg({ quality: 72 })
+      .toBuffer();
 
-  const [url, mobileUrl, thumbnailUrl] = await Promise.all([
-    putObject(`${base}.jpg`, full),
-    putObject(`${base}-${MOBILE_WIDTH}.jpg`, mobile),
-    putObject(`${base}-thumb.jpg`, thumb),
-  ]);
+    const [url, mobileUrl, thumbnailUrl] = await Promise.all([
+      putObject(`${base}.jpg`, full),
+      putObject(`${base}-${MOBILE_WIDTH}.jpg`, mobile),
+      putObject(`${base}-thumb.jpg`, thumb),
+    ]);
 
-  const result: UploadResult = { url, width, height, mobileUrl, thumbnailUrl };
-  return Response.json(result, { status: 201 });
+    const result: UploadResult = { url, width, height, mobileUrl, thumbnailUrl };
+    return Response.json(result, { status: 201 });
+  } catch (err) {
+    // On serverless (e.g. Vercel) the local disk is read-only, so this fails
+    // until BLOB_READ_WRITE_TOKEN is configured. Surface a clear message.
+    console.error("[upload] storage failed:", err);
+    return Response.json(
+      { error: "Could not store the image. Configure blob storage (BLOB_READ_WRITE_TOKEN)." },
+      { status: 500 }
+    );
+  }
 }

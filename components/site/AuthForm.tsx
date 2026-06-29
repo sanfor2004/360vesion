@@ -83,7 +83,7 @@ export default function AuthForm({
               spellCheck={false}
               minLength={3}
               maxLength={30}
-              pattern="[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+              pattern="[A-Za-z0-9](?:[-A-Za-z0-9]*[A-Za-z0-9])?"
               title="3–30 characters: letters, numbers and hyphens"
             />
             <span className={styles.hint}>Your public handle — your profile lives at /u/your-username</span>

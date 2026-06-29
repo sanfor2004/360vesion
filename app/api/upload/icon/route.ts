@@ -39,6 +39,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "unreadable image" }, { status: 422 });
   }
 
-  const url = await putObject(`icon-${uuid()}.png`, png);
-  return Response.json({ url }, { status: 201 });
+  try {
+    const url = await putObject(`icon-${uuid()}.png`, png);
+    return Response.json({ url }, { status: 201 });
+  } catch (err) {
+    console.error("[upload/icon] storage failed:", err);
+    return Response.json(
+      { error: "Could not store the image. Configure blob storage (BLOB_READ_WRITE_TOKEN)." },
+      { status: 500 }
+    );
+  }
 }
