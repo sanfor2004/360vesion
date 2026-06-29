@@ -83,11 +83,17 @@ function dataFor(input: Partial<Tour>): Prisma.InputJsonValue {
 // ---------------------------------------------------------------------------
 
 export async function getTour(id: string): Promise<Tour | null> {
-  const row = await prisma.tour.findUnique({
-    where: { id },
-    include: { owner: ownerSelect },
-  });
-  return row ? rowToTour(row) : null;
+  try {
+    const row = await prisma.tour.findUnique({
+      where: { id },
+      include: { owner: ownerSelect },
+    });
+    return row ? rowToTour(row) : null;
+  } catch (err) {
+    // Don't 500 the viewer/page on a DB outage — treat as "not found" and log.
+    console.error("[store] getTour failed:", err);
+    return null;
+  }
 }
 
 /** All tours (admin/debug). Prefer the scoped queries below. */
@@ -102,14 +108,21 @@ export async function listTours(): Promise<Tour[]> {
 /** Public Explore feed — published tours, newest first. */
 export async function listPublicTours(opts?: { take?: number; cursor?: string }): Promise<Tour[]> {
   const take = opts?.take ?? 48;
-  const rows = await prisma.tour.findMany({
-    where: { visibility: "public" },
-    orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
-    take,
-    ...(opts?.cursor ? { skip: 1, cursor: { id: opts.cursor } } : {}),
-    include: { owner: ownerSelect },
-  });
-  return rows.map(rowToTour);
+  try {
+    const rows = await prisma.tour.findMany({
+      where: { visibility: "public" },
+      orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+      take,
+      ...(opts?.cursor ? { skip: 1, cursor: { id: opts.cursor } } : {}),
+      include: { owner: ownerSelect },
+    });
+    return rows.map(rowToTour);
+  } catch (err) {
+    // Public feed (landing/explore/sitemap) should render empty, not 500, if the
+    // DB is briefly unreachable. Log the real cause for the server logs.
+    console.error("[store] listPublicTours failed:", err);
+    return [];
+  }
 }
 
 /** A user's own tours (dashboard) — drafts included. */
@@ -127,17 +140,23 @@ export async function getProfileWithTours(username: string): Promise<{
   user: { id: string; username: string; name: string | null; image: string | null; bio: string | null; website: string | null };
   tours: Tour[];
 } | null> {
-  const user = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true, username: true, name: true, image: true, bio: true, website: true },
-  });
-  if (!user?.username) return null;
-  const rows = await prisma.tour.findMany({
-    where: { ownerId: user.id, visibility: "public" },
-    orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
-    include: { owner: ownerSelect },
-  });
-  return { user: { ...user, username: user.username }, tours: rows.map(rowToTour) };
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, username: true, name: true, image: true, bio: true, website: true },
+    });
+    if (!user?.username) return null;
+    const rows = await prisma.tour.findMany({
+      where: { ownerId: user.id, visibility: "public" },
+      orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+      include: { owner: ownerSelect },
+    });
+    return { user: { ...user, username: user.username }, tours: rows.map(rowToTour) };
+  } catch (err) {
+    // Degrade to "profile not found" instead of 500 on a DB outage.
+    console.error("[store] getProfileWithTours failed:", err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

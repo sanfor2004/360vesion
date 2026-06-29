@@ -114,8 +114,18 @@ export type SessionUser = { id: string; username: string | null; email?: string 
 
 /** The signed-in user, or null. */
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  const session = await auth();
-  return session?.user ? { id: session.user.id, username: session.user.username, email: session.user.email } : null;
+  try {
+    const session = await auth();
+    return session?.user
+      ? { id: session.user.id, username: session.user.username, email: session.user.email }
+      : null;
+  } catch (err) {
+    // A missing AUTH_SECRET or a DB hiccup during the session lookup must not 500
+    // every page that renders the header — degrade to "logged out" and log the
+    // real cause (visible in the server/Vercel logs).
+    console.error("[auth] getCurrentUser failed:", err);
+    return null;
+  }
 }
 
 /** The signed-in user, or throw a 401-style sentinel for route handlers. */
