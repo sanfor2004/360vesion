@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Sphere Studio — 360° hotspot editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --ink:#14171c; --panel:#1a1e25; --panel2:#20252e; --line:#2c333d;
+    --text:#e6e9ed; --muted:#8a94a1; --amber:#e8a33d; --teal:#4fd1c5;
+    --danger:#e5707a; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --ui:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--ink); color:var(--text); font-family:var(--ui);
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---- top bar ---- */
+  header{
+    display:flex; align-items:center; gap:14px; padding:10px 16px;
+    background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto;
+  }
+  .brand{display:flex; align-items:baseline; gap:8px; margin-right:auto}
+  .brand b{font-size:15px; letter-spacing:.04em; font-weight:650}
+  .brand span{font-size:11px; color:var(--muted); font-family:var(--mono)}
+  .seg{display:flex; background:var(--ink); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .seg button{
+    border:0; background:transparent; color:var(--muted); font:inherit; font-size:13px;
+    padding:7px 16px; cursor:pointer; font-weight:600; letter-spacing:.02em;
+  }
+  .seg button.on{background:var(--panel2); color:var(--text)}
+  .seg button.on.edit{color:var(--amber); box-shadow:inset 0 -2px 0 var(--amber)}
+  .seg button.on.view{color:var(--teal); box-shadow:inset 0 -2px 0 var(--teal)}
+  .tools{display:flex; gap:8px; flex-wrap:wrap}
+  .btn{
+    border:1px solid var(--line); background:var(--panel2); color:var(--text);
+    font:inherit; font-size:12.5px; font-weight:600; padding:7px 12px; border-radius:7px;
+    cursor:pointer; white-space:nowrap;
+  }
+  .btn:hover{border-color:#3a4351}
+  .btn.ghost{background:transparent}
+  /* ---- main split ---- */
+  main{display:flex; flex:1 1 auto; min-height:0}
+  .stage{position:relative; flex:1 1 auto; min-width:0; background:#0d0f13; cursor:grab; touch-action:none}
+  .stage.placing{cursor:crosshair}
+  .stage:active{cursor:grabbing}
+  canvas{display:block; width:100%; height:100%}
+  /* ---- HUD ---- */
+  .hud{
+    position:absolute; left:14px; bottom:14px; font-family:var(--mono); font-size:12px;
+    background:rgba(13,15,19,.72); border:1px solid var(--line); border-radius:8px;
+    padding:8px 11px; pointer-events:none; line-height:1.5; backdrop-filter:blur(4px);
+  }
+  .hud .k{color:var(--muted)} .hud .yaw{color:var(--amber)} .hud .pitch{color:var(--teal)}
+  .hint{
+    position:absolute; left:50%; top:14px; transform:translateX(-50%);
+    font-size:12.5px; background:rgba(13,15,19,.72); border:1px solid var(--line);
+    padding:6px 14px; border-radius:20px; pointer-events:none; color:var(--muted);
+    backdrop-filter:blur(4px); white-space:nowrap;
+  }
+  .hint b{color:var(--amber)} .hint.view b{color:var(--teal)}
+  /* crosshair shown while placing */
+  .crosshair{position:absolute; width:18px; height:18px; pointer-events:none; display:none; transform:translate(-50%,-50%)}
+  .crosshair::before,.crosshair::after{content:"";position:absolute;background:var(--amber)}
+  .crosshair::before{left:8px;top:0;width:2px;height:18px}
+  .crosshair::after{top:8px;left:0;height:2px;width:18px}
+  /* ---- hotspot markers (DOM, projected each frame) ---- */
+  .markers{position:absolute; inset:0; overflow:hidden; pointer-events:none}
+  .marker{
+    position:absolute; pointer-events:auto; transform:translate(-50%,-50%);
+    width:26px; height:26px; border-radius:50%; cursor:pointer; padding:0;
+    border:2px solid #0d0f13; background:var(--teal); color:#0d0f13;
+    font:700 13px var(--mono); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.5); transition:transform .08s;
+  }
+  .marker:hover{transform:translate(-50%,-50%) scale(1.12)}
+  .marker.sel{background:var(--amber); box-shadow:0 0 0 3px rgba(232,163,61,.35),0 2px 8px rgba(0,0,0,.5)}
+  .popup{
+    position:absolute; transform:translate(-50%,calc(-100% - 18px)); pointer-events:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 13px;
+    width:200px; box-shadow:0 8px 24px rgba(0,0,0,.5); z-index:5;
+  }
+  .popup h4{margin:0 0 4px; font-size:13.5px}
+  .popup p{margin:0; font-size:12.5px; color:var(--muted); line-height:1.45; white-space:pre-wrap}
+  .popup::after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
+    border:7px solid transparent;border-top-color:var(--panel);border-bottom:0}
+  /* ---- side panel ---- */
+  aside{
+    flex:0 0 320px; background:var(--panel); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .ph{padding:12px 16px; border-bottom:1px solid var(--line); font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; align-items:center}
+  .ph .count{font-family:var(--mono); color:var(--text)}
+  .list{flex:1 1 auto; overflow:auto; padding:8px}
+  .row{
+    display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:8px; cursor:pointer;
+    border:1px solid transparent;
+  }
+  .row:hover{background:var(--panel2)}
+  .row.sel{background:var(--panel2); border-color:var(--amber)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--teal);flex:0 0 auto}
+  .row.sel .dot{background:var(--amber)}
+  .row .name{flex:1 1 auto; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .row .co{font-family:var(--mono); font-size:10.5px; color:var(--muted)}
+  .empty{color:var(--muted); font-size:13px; padding:24px 14px; text-align:center; line-height:1.6}
+  .editor{border-top:1px solid var(--line); padding:14px 16px; flex:0 0 auto}
+  .editor.hide{display:none}
+  .editor label{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 5px}
+  .editor input,.editor textarea{
+    width:100%; background:var(--ink); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:8px 10px; font:inherit; font-size:13.5px; margin-bottom:11px;
+  }
+  .editor textarea{resize:vertical; min-height:58px}
+  .editor input:focus,.editor textarea:focus{outline:0; border-color:var(--amber)}
+  .coords{display:flex; gap:10px}
+  .coords>div{flex:1}
+  .coords input{font-family:var(--mono)}
+  .del{width:100%; background:transparent; border:1px solid var(--danger); color:var(--danger);
+    border-radius:7px; padding:8px; font:inherit; font-weight:600; cursor:pointer}
+  .del:hover{background:rgba(229,112,122,.12)}
+  input[type=file]{display:none}
+  @media(max-width:760px){
+    main{flex-direction:column}
+    aside{flex:0 0 44%; border-left:0; border-top:1px solid var(--line)}
+    .tools{order:3; width:100%; justify-content:center}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>SPHERE STUDIO</b><span>360° hotspot editor</span></div>
+  <div class="seg" id="modeSeg">
+    <button id="mEdit" class="on edit">Edit</button>
+    <button id="mView" class="view">View</button>
+  </div>
+  <div class="tools">
+    <button class="btn" id="bLoad">Load image</button>
+    <button class="btn ghost" id="bReset">Test grid</button>
+    <button class="btn" id="bImport">Import</button>
+    <button class="btn" id="bExport">Export JSON</button>
+    <button class="btn ghost" id="bPSV">Copy PSV config</button>
+  </div>
+</header>
+
+<main>
+  <div class="stage placing" id="stage">
+    <div class="markers" id="markers"></div>
+    <div class="crosshair" id="cross"></div>
+    <div class="hint" id="hint"><b>Edit mode</b> — drag to look, click to place a hotspot</div>
+    <div class="hud" id="hud">
+      <span class="k">yaw</span> <span class="yaw" id="hYaw">—</span>&nbsp;
+      <span class="k">pitch</span> <span class="pitch" id="hPitch">—</span>
+    </div>
+  </div>
+
+  <aside>
+    <div class="ph"><span>Hotspots</span><span class="count" id="count">0</span></div>
+    <div class="list" id="list"></div>
+    <div class="editor hide" id="editor">
+      <label>Label</label>
+      <input id="eLabel" placeholder="e.g. Front door" />
+      <label>Content (shown on click in View mode)</label>
+      <textarea id="eContent" placeholder="Description, link, anything…"></textarea>
+      <div class="coords">
+        <div><label>Yaw°</label><input id="eYaw" type="number" step="0.1" /></div>
+        <div><label>Pitch°</label><input id="ePitch" type="number" step="0.1" /></div>
+      </div>
+      <button class="del" id="eDel">Delete hotspot</button>
+    </div>
+  </aside>
+</main>
+
+<input type="file" id="fileImg" accept="image/*" />
+<input type="file" id="fileJson" accept="application/json,.json" />
+
+<script>
+/* ============================================================
+   Sphere Studio — a minimal 360° hotspot authoring tool.
+   Built on Three.js. Camera sits at the centre of an inverted
+   sphere textured with an equirectangular image. Hotspots are
+   stored as {yaw, pitch} and rendered as DOM elements that are
+   re-projected to screen space every frame.
+   ============================================================ */
+
+const R = 500;                 // sphere radius
+let lon = 0, lat = 0;          // camera look direction (degrees)
+let mode = 'edit';             // 'edit' | 'view'
+let selectedId = null;
+let hotspots = [];             // {id, label, content, yaw, pitch}
+let objectUrl = null;          // current loaded-image blob url (for cleanup)
+
+const stage = document.getElementById('stage');
+const markersEl = document.getElementById('markers');
+const cross = document.getElementById('cross');
+
+/* ---------- Three.js setup ---------- */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1100);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.outputEncoding = THREE.sRGBEncoding;
+stage.insertBefore(renderer.domElement, markersEl);
+
+const geo = new THREE.SphereGeometry(R, 64, 48);
+const mat = new THREE.MeshBasicMaterial({ side: THREE.BackSide });
+const sphere = new THREE.Mesh(geo, mat);
+scene.add(sphere);
+
+/* Mirror the texture horizontally so images read the right way round
+   when viewed from inside with BackSide (keeps raycast math simple). */
+function applyTexture(tex){
+  tex.encoding = THREE.sRGBEncoding;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.x = -1; tex.offset.x = 1;
+  tex.minFilter = THREE.LinearFilter;
+  if (mat.map) mat.map.dispose();
+  mat.map = tex; mat.needsUpdate = true;
+}
+
+/* ---------- Built-in test panorama (so the tool works instantly) ---------- */
+function buildTestPanorama(){
+  const w = 4096, h = 2048;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#10243b'); g.addColorStop(.48,'#3b6ea5');
+  g.addColorStop(.5,'#cfe3f2'); g.addColorStop(.52,'#5a4632'); g.addColorStop(1,'#1c140d');
+  x.fillStyle = g; x.fillRect(0,0,w,h);
+  // grid: vertical = every 30° yaw, horizontal = every 15° pitch
+  x.strokeStyle = 'rgba(255,255,255,.18)'; x.lineWidth = 2;
+  for(let i=0;i<=12;i++){ const px=i/12*w; x.beginPath(); x.moveTo(px,0); x.lineTo(px,h); x.stroke(); }
+  for(let j=0;j<=12;j++){ const py=j/12*h; x.beginPath(); x.moveTo(0,py); x.lineTo(w,py); x.stroke(); }
+  x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 3;
+  x.beginPath(); x.moveTo(0,h/2); x.lineTo(w,h/2); x.stroke();
+  // cardinal labels along the horizon
+  x.fillStyle = '#fff'; x.font = 'bold 130px sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  const card = [['N',.5],['E',.75],['S',0],['W',.25]]; // u positions
+  card.forEach(([t,u])=>{ x.fillText(t, u*w || (u===0?w*0.0001:0), h/2-110);
+                          x.fillText(t, (u===0? w :u*w), h/2-110); });
+  // degree ticks
+  x.font = '600 46px ui-monospace,monospace'; x.fillStyle='rgba(255,255,255,.7)';
+  for(let i=0;i<12;i++){ const deg=i*30; x.fillText(deg+'°', i/12*w+90, h/2+70); }
+  applyTexture(new THREE.CanvasTexture(c));
+}
+
+/* ---------- coordinate helpers ---------- */
+const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad;
+
+// look direction -> a point to lookAt
+function lookTarget(){
+  const phi = rad(90 - lat), theta = rad(lon);
+  return new THREE.Vector3(
+    R*Math.sin(phi)*Math.cos(theta),
+    R*Math.cos(phi),
+    R*Math.sin(phi)*Math.sin(theta)
+  );
+}
+// (yaw,pitch) -> world position on sphere (slightly inside)
+function dirToWorld(yaw, pitch, r=R-6){
+  const phi = rad(90 - pitch), theta = rad(yaw);
+  return new THREE.Vector3(
+    r*Math.sin(phi)*Math.cos(theta),
+    r*Math.cos(phi),
+    r*Math.sin(phi)*Math.sin(theta)
+  );
+}
+// world point on sphere -> (yaw,pitch)
+function worldToDir(p){
+  const pitch = 90 - deg(Math.acos(THREE.MathUtils.clamp(p.y/p.length(),-1,1)));
+  const yaw = deg(Math.atan2(p.z, p.x));
+  return { yaw, pitch };
+}
+
+/* ---------- render loop ---------- */
+const fwd = new THREE.Vector3();
+function animate(){
+  requestAnimationFrame(animate);
+  lat = Math.max(-85, Math.min(85, lat));
+  camera.lookAt(lookTarget());
+  renderer.render(scene, camera);
+  positionMarkers();
+}
+function positionMarkers(){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  camera.getWorldDirection(fwd);
+  for(const hs of hotspots){
+    const el = hs._el; if(!el) continue;
+    const wp = dirToWorld(hs.yaw, hs.pitch);
+    const behind = wp.clone().normalize().dot(fwd) <= 0.02;
+    const v = wp.project(camera);
+    if(behind){ el.style.display='none'; if(hs._pop) hs._pop.style.display='none'; continue; }
+    el.style.display='flex';
+    const sx = (v.x*0.5+0.5)*w, sy = (-v.y*0.5+0.5)*h;
+    el.style.left = sx+'px'; el.style.top = sy+'px';
+    if(hs._pop){ hs._pop.style.left = sx+'px'; hs._pop.style.top = sy+'px'; }
+  }
+}
+
+/* ---------- markers (DOM) ---------- */
+function rebuildMarkers(){
+  markersEl.innerHTML = '';
+  hotspots.forEach((hs, i)=>{
+    const b = document.createElement('button');
+    b.className = 'marker' + (hs.id===selectedId?' sel':'');
+    b.textContent = i+1;
+    b.addEventListener('click', e=>{
+      e.stopPropagation();
+      if(mode==='edit'){ select(hs.id); }
+      else { togglePopup(hs); }
+    });
+    hs._el = b; markersEl.appendChild(b);
+
+    if(mode==='view'){
+      const p = document.createElement('div');
+      p.className='popup'; p.style.display='none';
+      p.innerHTML = `<h4></h4><p></p>`;
+      p.querySelector('h4').textContent = hs.label || 'Untitled';
+      p.querySelector('p').textContent = hs.content || '';
+      hs._pop = p; markersEl.appendChild(p);
+    } else hs._pop = null;
+  });
+}
+function togglePopup(hs){
+  const open = hs._pop && hs._pop.style.display!=='none';
+  hotspots.forEach(h=>{ if(h._pop) h._pop.style.display='none'; });
+  if(hs._pop && !open) hs._pop.style.display='block';
+}
+
+/* ---------- side panel ---------- */
+const listEl=document.getElementById('list'), countEl=document.getElementById('count');
+const editor=document.getElementById('editor');
+const eLabel=document.getElementById('eLabel'), eContent=document.getElementById('eContent');
+const eYaw=document.getElementById('eYaw'), ePitch=document.getElementById('ePitch');
+
+function renderList(){
+  countEl.textContent = hotspots.length;
+  listEl.innerHTML = '';
+  if(hotspots.length===0){
+    listEl.innerHTML = '<div class="empty">No hotspots yet.<br>In Edit mode, click anywhere on the panorama to drop one.</div>';
+  }
+  hotspots.forEach((hs,i)=>{
+    const r = document.createElement('div');
+    r.className='row'+(hs.id===selectedId?' sel':'');
+    r.innerHTML = `<span class="dot"></span><span class="name"></span>
+      <span class="co">${hs.yaw.toFixed(0)}°, ${hs.pitch.toFixed(0)}°</span>`;
+    r.querySelector('.name').textContent = `${i+1}. ${hs.label||'Untitled'}`;
+    r.addEventListener('click', ()=>select(hs.id));
+    listEl.appendChild(r);
+  });
+}
+function select(id){
+  selectedId = id;
+  const hs = hotspots.find(h=>h.id===id);
+  if(hs){
+    editor.classList.remove('hide');
+    eLabel.value=hs.label||''; eContent.value=hs.content||'';
+    eYaw.value=hs.yaw.toFixed(1); ePitch.value=hs.pitch.toFixed(1);
+  } else editor.classList.add('hide');
+  rebuildMarkers(); renderList();
+}
+function cur(){ return hotspots.find(h=>h.id===selectedId); }
+eLabel.addEventListener('input', ()=>{ const h=cur(); if(h){h.label=eLabel.value; renderList(); rebuildMarkers();} });
+eContent.addEventListener('input', ()=>{ const h=cur(); if(h)h.content=eContent.value; });
+eYaw.addEventListener('input', ()=>{ const h=cur(); if(h)h.yaw=parseFloat(eYaw.value)||0; });
+ePitch.addEventListener('input', ()=>{ const h=cur(); if(h)h.pitch=Math.max(-89,Math.min(89,parseFloat(ePitch.value)||0)); });
+document.getElementById('eDel').addEventListener('click', ()=>{
+  hotspots = hotspots.filter(h=>h.id!==selectedId); selectedId=null;
+  editor.classList.add('hide'); rebuildMarkers(); renderList();
+});
+
+/* ---------- pointer controls + placing ---------- */
+const ptrs = new Map(); let moved=false, startX=0, startY=0, pinchStart=0, fovStart=75;
+const raycaster = new THREE.Raycaster();
+
+stage.addEventListener('pointerdown', e=>{
+  stage.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(ptrs.size===1){ moved=false; startX=e.clientX; startY=e.clientY; }
+  if(ptrs.size===2){ const a=[...ptrs.values()]; pinchStart=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); fovStart=camera.fov; }
+});
+stage.addEventListener('pointermove', e=>{
+  const p = ptrs.get(e.pointerId); if(p){ p.x=e.clientX; p.y=e.clientY; }
+  // live coordinate HUD
+  updateHud(e);
+  if(ptrs.size===2){ // pinch zoom
+    const a=[...ptrs.values()]; const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+    camera.fov = Math.max(30, Math.min(100, fovStart*(pinchStart/d))); camera.updateProjectionMatrix(); return;
+  }
+  if(ptrs.size===1 && e.buttons!==0 || (ptrs.size===1 && e.pressure>0)){
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    if(Math.abs(dx)+Math.abs(dy) > 4) moved=true;
+    lon -= (e.movementX||0)*0.13*(camera.fov/75);
+    lat += (e.movementY||0)*0.13*(camera.fov/75);
+  }
+});
+function endPointer(e){
+  const wasOne = ptrs.size===1;
+  ptrs.delete(e.pointerId);
+  if(wasOne && !moved && mode==='edit') placeAt(e); // tap on empty sphere = place
+  if(wasOne && !moved && mode==='view'){ hotspots.forEach(h=>{ if(h._pop)h._pop.style.display='none'; }); }
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', e=>ptrs.delete(e.pointerId));
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  camera.fov = Math.max(30, Math.min(100, camera.fov + e.deltaY*0.05));
+  camera.updateProjectionMatrix();
+}, {passive:false});
+
+function ndc(e){
+  const r = renderer.domElement.getBoundingClientRect();
+  return new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+}
+function placeAt(e){
+  raycaster.setFromCamera(ndc(e), camera);
+  const hit = raycaster.intersectObject(sphere)[0];
+  if(!hit) return;
+  const d = worldToDir(hit.point);
+  const hs = { id:'hs_'+Date.now().toString(36), label:'', content:'', yaw:+d.yaw.toFixed(2), pitch:+d.pitch.toFixed(2) };
+  hotspots.push(hs); select(hs.id); eLabel.focus();
+}
+function updateHud(e){
+  if(ptrs.size>1) return;
+  raycaster.setFromCamera(ndc(e), camera);
+  const hit = raycaster.intersectObject(sphere)[0];
+  if(hit){
+    const d = worldToDir(hit.point);
+    document.getElementById('hYaw').textContent = d.yaw.toFixed(1).padStart(6)+'°';
+    document.getElementById('hPitch').textContent = d.pitch.toFixed(1).padStart(5)+'°';
+    if(mode==='edit'){ cross.style.display='block'; cross.style.left=e.clientX-stage.getBoundingClientRect().left+'px'; cross.style.top=e.clientY-stage.getBoundingClientRect().top+'px'; }
+  }
+}
+stage.addEventListener('pointerleave', ()=>cross.style.display='none');
+
+/* ---------- mode toggle ---------- */
+const mEdit=document.getElementById('mEdit'), mView=document.getElementById('mView');
+const hint=document.getElementById('hint');
+function setMode(m){
+  mode=m;
+  mEdit.classList.toggle('on', m==='edit'); mView.classList.toggle('on', m==='view');
+  stage.classList.toggle('placing', m==='edit');
+  hint.classList.toggle('view', m==='view');
+  hint.innerHTML = m==='edit'
+    ? '<b>Edit mode</b> — drag to look, click to place a hotspot'
+    : '<b>View mode</b> — drag to look, click a hotspot to read it';
+  if(m==='view'){ selectedId=null; editor.classList.add('hide'); }
+  cross.style.display='none';
+  rebuildMarkers(); renderList();
+}
+mEdit.addEventListener('click', ()=>setMode('edit'));
+mView.addEventListener('click', ()=>setMode('view'));
+
+/* ---------- load / reset image ---------- */
+const fileImg=document.getElementById('fileImg');
+document.getElementById('bLoad').addEventListener('click', ()=>fileImg.click());
+fileImg.addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  if(objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(f);
+  new THREE.TextureLoader().load(objectUrl, t=>applyTexture(t));
+  fileImg.value='';
+});
+document.getElementById('bReset').addEventListener('click', buildTestPanorama);
+
+/* ---------- export / import ---------- */
+function download(name, text, type){
+  const blob=new Blob([text],{type}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('bExport').addEventListener('click', ()=>{
+  const data = hotspots.map(h=>({id:h.id,label:h.label,content:h.content,yaw:h.yaw,pitch:h.pitch}));
+  download('hotspots.json', JSON.stringify(data,null,2), 'application/json');
+});
+document.getElementById('bPSV').addEventListener('click', async ()=>{
+  // Photo Sphere Viewer markers-plugin format
+  const psv = hotspots.map(h=>({
+    id:h.id, position:{yaw:h.yaw+'deg', pitch:h.pitch+'deg'},
+    image:'pin.png', size:{width:32,height:32}, anchor:'bottom center',
+    tooltip:h.label||'', content:h.content||''
+  }));
+  const txt = JSON.stringify(psv,null,2);
+  try{ await navigator.clipboard.writeText(txt); alert('Photo Sphere Viewer marker config copied to clipboard.'); }
+  catch{ download('psv-markers.json', txt, 'application/json'); }
+});
+const fileJson=document.getElementById('fileJson');
+document.getElementById('bImport').addEventListener('click', ()=>fileJson.click());
+fileJson.addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+    const arr=JSON.parse(r.result);
+    hotspots = arr.map((h,i)=>({ id:h.id||('hs_'+i), label:h.label||'', content:h.content||'',
+      yaw:+(h.yaw??0), pitch:+(h.pitch??0) }));
+    selectedId=null; editor.classList.add('hide'); rebuildMarkers(); renderList();
+  }catch{ alert('Could not parse that JSON.'); } };
+  r.readAsText(f); fileJson.value='';
+});
+
+/* ---------- resize ---------- */
+function resize(){
+  const w=stage.clientWidth, h=stage.clientHeight;
+  camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+}
+window.addEventListener('resize', resize);
+
+/* ---------- boot ---------- */
+buildTestPanorama();
+resize(); setMode('edit'); renderList(); animate();
+</script>
+</body>
+</html>

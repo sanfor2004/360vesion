@@ -1,0 +1,28 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next
+/out
+
+# production
+/build
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# local data + uploads (runtime-generated; not source)
+/public/uploads/*
+!/public/uploads/.gitkeep
+/data/tours/*
+!/data/tours/.gitkeep
+
+# env
+.env
+.env.local
+.env*.local
+
+# misc
+.DS_Store
+*.log

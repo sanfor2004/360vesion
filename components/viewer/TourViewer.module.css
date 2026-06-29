@@ -1,0 +1,81 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+}
+
+/* current scene name (multi-scene tours) */
+.sceneLabel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 10;
+  background: rgba(13, 15, 19, 0.72);
+  border: 1px solid var(--line, #2c333d);
+  color: var(--text, #e6e9ed);
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+/* info / media panel */
+.panel {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  background: var(--panel, #1a1e25);
+  color: var(--text, #e6e9ed);
+  border: 1px solid var(--line, #2c333d);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  z-index: 10;
+}
+.panel h3 {
+  margin: 0 32px 8px 0;
+  font-size: 16px;
+}
+.panel p {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted, #8a94a1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.panel a {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--teal, #4fd1c5);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.media {
+  width: 100%;
+  border-radius: 8px;
+  margin-top: 4px;
+}
+.close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, #8a94a1);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #e6e9ed);
+}

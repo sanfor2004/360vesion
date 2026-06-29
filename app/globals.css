@@ -1,0 +1,32 @@
+:root {
+  --ink: #14171c;
+  --panel: #1a1e25;
+  --line: #2c333d;
+  --text: #e6e9ed;
+  --muted: #8a94a1;
+  --teal: #4fd1c5;
+  --ui: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--ui);
+  -webkit-font-smoothing: antialiased;
+  cursor: url("/cursors/arrow.svg") 4 2, auto;
+}
+
+a {
+  color: var(--teal);
+}

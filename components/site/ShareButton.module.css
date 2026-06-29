@@ -1,0 +1,149 @@
+/* Floating "Share" pill overlaid on the viewer (top-right). */
+.fab {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 15, 19, 0.72);
+  border: 1px solid var(--line, #2c333d);
+  color: var(--text, #e6e9ed);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.fab:hover {
+  border-color: var(--teal, #4fd1c5);
+  color: var(--teal, #4fd1c5);
+}
+
+/* ---- dialog ---- */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+.dialog {
+  position: relative;
+  width: min(460px, 100%);
+  background: var(--panel, #1a1e25);
+  color: var(--text, #e6e9ed);
+  border: 1px solid var(--line, #2c333d);
+  border-radius: 14px;
+  padding: 22px 22px 24px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+.close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted, #8a94a1);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #e6e9ed);
+}
+.heading {
+  margin: 0 0 18px;
+  font-size: 17px;
+}
+.label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #8a94a1);
+  margin: 0 0 6px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 6px;
+}
+.input,
+.code {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--ink, #14171c);
+  border: 1px solid var(--line, #2c333d);
+  color: var(--text, #e6e9ed);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 13px;
+}
+.code {
+  resize: none;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.input:focus,
+.code:focus {
+  outline: 0;
+  border-color: var(--teal, #4fd1c5);
+}
+.copy {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  background: var(--teal, #4fd1c5);
+  border: 1px solid var(--teal, #4fd1c5);
+  color: #0d0f13;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.copy:hover {
+  filter: brightness(1.05);
+}
+.hint {
+  margin: 0 0 18px;
+  font-size: 12px;
+  color: var(--muted, #8a94a1);
+  line-height: 1.4;
+}
+.socials {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.social {
+  flex: 1 1 auto;
+  text-align: center;
+  background: var(--ink, #14171c);
+  border: 1px solid var(--line, #2c333d);
+  color: var(--text, #e6e9ed);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.social:hover {
+  border-color: var(--teal, #4fd1c5);
+  color: var(--teal, #4fd1c5);
+}

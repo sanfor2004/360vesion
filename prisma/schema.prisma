@@ -1,0 +1,103 @@
+// Prisma schema for 360Vision.
+//
+// DATABASE: MySQL (hosted). The connection string lives in DATABASE_URL (.env).
+// Schema changes are synced with `npm run db:push` (Prisma `db push`) — this host
+// is shared MySQL and does not allow the shadow database that `migrate dev`
+// needs, so we sync the schema directly rather than keeping a migration history.
+//
+// Column-type notes: OAuth tokens and tour descriptions can exceed MySQL's
+// default VARCHAR(191), so they use @db.Text; URL-bearing columns are widened.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) models — standard adapter shape + our profile fields.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?   @db.VarChar(1024)
+
+  // Community profile + credentials
+  username     String? @unique // public handle → /u/<username>
+  passwordHash String? // set only for email/password sign-ups
+  bio          String? @db.VarChar(1024)
+  website      String? @db.VarChar(512)
+
+  createdAt DateTime @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  tours    Tour[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Domain
+// ---------------------------------------------------------------------------
+
+model Tour {
+  id          String    @id @default(cuid())
+  ownerId     String
+  slug        String // unique per owner; pretty handle for the tour
+  title       String    @db.VarChar(512)
+  // No @default: MySQL/MariaDB reject literal defaults on TEXT columns, and every
+  // write path (createTour/saveTour) already supplies a value.
+  description String    @db.Text
+  visibility  String    @default("draft") // draft | public | unlisted
+  coverUrl    String?   @db.VarChar(1024)
+  data        Json // the full Tour shape { scenes, hotspots, ... } (lib/types.ts)
+  viewCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, slug])
+  @@index([visibility, publishedAt])
+}
