@@ -141,25 +141,60 @@ export async function ownsTour(userId: string, tourId: string): Promise<boolean>
   return !!t && t.ownerId === userId;
 }
 
-/** Create an email/password user (sign-up). Returns the new user id. */
+/** Username rules — must match the profile editor (app/api/profile/route.ts). */
+const USERNAME_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/** Create an email/password user (sign-up) with a chosen username. */
 export async function registerUser(
   email: string,
   password: string,
+  username: string,
   name?: string
 ): Promise<{ id: string; username: string }> {
-  const normalized = email.toLowerCase().trim();
-  if (!normalized || !password || password.length < 8) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedUsername = username.toLowerCase().trim();
+
+  if (!normalizedEmail || !password || password.length < 8) {
     throw new Error("Email and a password of at least 8 characters are required.");
   }
-  const existing = await prisma.user.findUnique({ where: { email: normalized } });
-  if (existing) throw new Error("An account with that email already exists.");
-  const passwordHash = await bcrypt.hash(password, 10);
-  const username = await generateUsername(name || normalized);
-  const user = await prisma.user.create({
-    data: { email: normalized, name: name || null, passwordHash, username },
-    select: { id: true, username: true },
+  if (
+    normalizedUsername.length < 3 ||
+    normalizedUsername.length > 30 ||
+    !USERNAME_RE.test(normalizedUsername)
+  ) {
+    throw new Error(
+      "Username must be 3–30 characters: lowercase letters, numbers and hyphens."
+    );
+  }
+
+  const existingEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (existingEmail) throw new Error("An account with that email already exists.");
+  const existingUsername = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
   });
-  return { id: user.id, username: user.username! };
+  if (existingUsername) throw new Error("That username is taken.");
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  try {
+    const user = await prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        name: name?.trim() || null,
+        passwordHash,
+        username: normalizedUsername,
+      },
+      select: { id: true, username: true },
+    });
+    return { id: user.id, username: user.username! };
+  } catch (err) {
+    // Unique-constraint race (two signups grabbing the same handle/email at once).
+    if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
+      const target = String((err as { meta?: { target?: unknown } }).meta?.target ?? "");
+      if (target.includes("username")) throw new Error("That username is taken.");
+      throw new Error("An account with that email already exists.");
+    }
+    throw err;
+  }
 }
 
 export class UnauthorizedError extends Error {

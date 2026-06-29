@@ -20,6 +20,7 @@ export default function AuthForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +33,7 @@ export default function AuthForm({
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, name }),
+          body: JSON.stringify({ email, password, name, username }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Sign-up failed");
@@ -72,6 +73,21 @@ export default function AuthForm({
       <form className={styles.form} onSubmit={submit}>
         {isSignup && (
           <>
+            <label>Username</label>
+            <input
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="jane-doe"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              minLength={3}
+              maxLength={30}
+              pattern="[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+              title="3–30 characters: letters, numbers and hyphens"
+            />
+            <span className={styles.hint}>Your public handle — your profile lives at /u/your-username</span>
             <label>Name (optional)</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
           </>
