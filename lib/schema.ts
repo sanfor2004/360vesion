@@ -7,7 +7,13 @@ import { z } from "zod";
 import { MAX_IMAGE_WIDTH } from "./types";
 
 export const projectionSchema = z.enum(["equirectangular", "cubemap"]);
-export const hotspotTypeSchema = z.enum(["info", "link", "scene", "media"]);
+export const hotspotTypeSchema = z.enum([
+  "info",
+  "link",
+  "scene",
+  "media",
+  "text",
+]);
 export const visibilitySchema = z.enum(["draft", "public", "unlisted"]);
 
 export const imageAssetSchema = z.object({
@@ -29,7 +35,9 @@ export const hotspotSchema = z.object({
   targetSceneId: z.string().optional(),
   url: z.string().optional(),
   icon: z.string().optional(),
+  iconColor: z.string().optional(),
   iconSize: z.number().min(12).max(160).optional(),
+  fontSize: z.number().min(8).max(200).optional(),
 });
 
 export const sceneSchema = z.object({

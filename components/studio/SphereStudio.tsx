@@ -433,7 +433,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
         label: "",
         content: "",
         yaw: +d.yaw.toFixed(2),
-        pitch: +d.pitch.toFixed(2),
+        pitch: Math.max(-89, Math.min(89, +d.pitch.toFixed(2))),
       };
       setActiveHotspots((prev) => [...prev, hs]);
       setSelectedId(hs.id);
@@ -842,12 +842,13 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     const hit = t.raycaster.intersectObject(t.sphere)[0];
     if (!hit) return;
     const dir = worldToDir(hit.point);
+    // Clamp pitch to the persisted range (±89) so a drag near the poles can't
+    // produce a value the save schema rejects.
+    const pitch = Math.max(-89, Math.min(89, +dir.pitch.toFixed(2)));
     skipHistory.current = true;
     setActiveHotspots((hs) =>
       hs.map((h) =>
-        h.id === d.id
-          ? { ...h, yaw: +dir.yaw.toFixed(2), pitch: +dir.pitch.toFixed(2) }
-          : h
+        h.id === d.id ? { ...h, yaw: +dir.yaw.toFixed(2), pitch } : h
       )
     );
   };
