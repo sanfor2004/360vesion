@@ -74,6 +74,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const [openPopupId, setOpenPopupId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [imgError, setImgError] = useState<string | null>(null);
 
   // ---- collapsible right-panel sections ----
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
@@ -125,6 +126,63 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+
+  // ---- undo history (Ctrl/Cmd+Z) ----
+  // We snapshot whole-`scenes` states. Most user edits flow through setScenes,
+  // so recording every change to `scenes` (except programmatic ones we flag)
+  // gives a faithful undo stack without threading a snapshot call through every
+  // handler.
+  const undoStack = useRef<Scene[][]>([]);
+  const prevScenesRef = useRef<Scene[]>(scenes);
+  const skipHistory = useRef(false);
+  useEffect(() => {
+    if (prevScenesRef.current === scenes) return;
+    if (skipHistory.current) {
+      skipHistory.current = false;
+    } else {
+      undoStack.current.push(prevScenesRef.current);
+      if (undoStack.current.length > 100) undoStack.current.shift();
+    }
+    prevScenesRef.current = scenes;
+  }, [scenes]);
+
+  const undo = useCallback(() => {
+    const prev = undoStack.current.pop();
+    if (!prev) {
+      setStatus("Nothing to undo");
+      return;
+    }
+    skipHistory.current = true;
+    setScenes(prev);
+    // The active scene may have been removed (undoing an add) or its image may
+    // differ from what's currently rendered — re-anchor to a valid scene and
+    // reload its texture so the preview matches the restored state.
+    const active = prev.find((s) => s.id === activeIdRef.current) ?? prev[0];
+    if (active) {
+      setActiveId(active.id);
+      three.current?.loadTextureUrl(active.image.url);
+    }
+    setSelectedId((cur) =>
+      active && active.hotspots.some((h) => h.id === cur) ? cur : null
+    );
+    setOpenPopupId(null);
+    setStatus("Undo");
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      if (e.key.toLowerCase() !== "z") return;
+      // Let inputs handle native text undo rather than reverting scene state.
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+      e.preventDefault();
+      undo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo]);
 
   // ---- mutate the active scene's hotspots ----
   const setActiveHotspots = useCallback(
@@ -231,9 +289,21 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     const loadTextureUrl = (url: string) => {
-      loader.load(url, applyTexture, undefined, () => {
-        applyTexture(buildTestPanorama());
-      });
+      setImgError(null);
+      loader.load(
+        url,
+        (tex) => {
+          applyTexture(tex);
+          setImgError(null);
+        },
+        undefined,
+        () => {
+          applyTexture(buildTestPanorama());
+          setImgError(
+            "Couldn't load this panorama image — it may be corrupt, too large, or an unsupported format. Showing the test grid instead."
+          );
+        }
+      );
     };
 
     const ctx = {
@@ -425,6 +495,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
         setDescription(tour.description ?? "");
         setVisibility(tour.visibility ?? "draft");
         setCreatedAt(tour.createdAt);
+        skipHistory.current = true; // loading a tour isn't an undoable edit
         setScenes(tour.scenes);
         setStartSceneId(tour.startSceneId || tour.scenes[0].id);
         const start =
@@ -451,6 +522,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     // moves the camera to the incoming scene. (A setScenes updater would run
     // after applyFraming and capture the wrong orientation.)
     const captured = captureFraming(scenes, activeId);
+    skipHistory.current = true; // a framing snapshot on switch isn't a discrete edit
     setScenes(captured);
     const incoming = captured.find((s) => s.id === id);
     setActiveId(id);
@@ -735,6 +807,23 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               —
             </span>
           </div>
+
+          {imgError && (
+            <div className={styles.imgError} role="alert">
+              <span className={styles.imgErrorIcon} aria-hidden>
+                !
+              </span>
+              <span>{imgError}</span>
+              <button
+                type="button"
+                className={styles.imgErrorClose}
+                aria-label="Dismiss"
+                onClick={() => setImgError(null)}
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
 
         <aside className={styles.aside}>

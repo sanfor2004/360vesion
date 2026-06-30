@@ -326,6 +326,53 @@
 .hint b {
   color: var(--amber);
 }
+
+/* ---- image-load error banner ---- */
+.imgError {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100% - 28px));
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #ffd9dd;
+  background: rgba(45, 18, 22, 0.92);
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+.imgErrorIcon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #2d1216;
+  font: 700 13px var(--mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.imgErrorClose {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #ffd9dd;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.imgErrorClose:hover {
+  color: #fff;
+}
 .hintView b {
   color: var(--teal);
 }
