@@ -15,6 +15,7 @@ import {
 import { fetchTour, saveTour, uploadIcon, uploadImage } from "@/lib/api-client";
 import {
   DEFAULT_PIN_COLOR,
+  DEFAULT_TEXT_SIZE,
   glyphKey,
   iconSrc,
   isBuiltinIcon,
@@ -27,7 +28,7 @@ import { dirToWorld, lookTarget, ndcFromEvent, worldToDir } from "./raycast";
 import styles from "./SphereStudio.module.css";
 
 const R = 500; // sphere radius
-const HOTSPOT_TYPES: HotspotType[] = ["info", "link", "scene", "media"];
+const HOTSPOT_TYPES: HotspotType[] = ["info", "link", "scene", "media", "text"];
 
 /** A real, served URL so saved scenes are immediately viewable. */
 const DEFAULT_IMAGE: ImageAsset = {
@@ -571,6 +572,42 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
       prev.map((s) => (s.id === activeId ? { ...s, name } : s))
     );
 
+  // ---------------------------------------------------------------- starting view
+  // Store where the camera should face when this scene opens. Capturing the live
+  // camera is the primary control; the numeric inputs fine-tune it and also move
+  // the camera there, so the framing snapshot taken on save stays consistent.
+  const setStartFromCurrent = useCallback(() => {
+    setScenes((prev) => captureFraming(prev, activeIdRef.current));
+    setStatus("Starting view set to the current camera");
+  }, [captureFraming]);
+
+  const previewStartView = useCallback(() => {
+    const cam = three.current;
+    const s = scenes.find((x) => x.id === activeId);
+    if (!cam || !s) return;
+    cam.lon = s.initialYaw;
+    cam.lat = s.initialPitch;
+    cam.camera.fov = s.initialFov || DEFAULT_FOV;
+    cam.camera.updateProjectionMatrix();
+  }, [scenes, activeId]);
+
+  const updateStartView = useCallback(
+    (patch: Partial<Pick<Scene, "initialYaw" | "initialPitch" | "initialFov">>) => {
+      setScenes((prev) =>
+        prev.map((s) => (s.id === activeIdRef.current ? { ...s, ...patch } : s))
+      );
+      const cam = three.current;
+      if (!cam) return;
+      if (patch.initialYaw !== undefined) cam.lon = patch.initialYaw;
+      if (patch.initialPitch !== undefined) cam.lat = patch.initialPitch;
+      if (patch.initialFov !== undefined) {
+        cam.camera.fov = patch.initialFov;
+        cam.camera.updateProjectionMatrix();
+      }
+    },
+    []
+  );
+
   // ---------------------------------------------------------------- image load
   const onPickImage = () => fileImgRef.current?.click();
   const onImageChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -736,6 +773,23 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 }}
                 className={styles.markerWrap}
               >
+                {hs.type === "text" ? (
+                  <button
+                    className={`${styles.markerText} ${
+                      hs.id === selectedId ? styles.markerTextSel : ""
+                    }`}
+                    style={{
+                      color: hs.iconColor || "#ffffff",
+                      fontSize: hs.fontSize ?? DEFAULT_TEXT_SIZE,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      select(hs.id);
+                    }}
+                  >
+                    {hs.content || hs.label || "Text"}
+                  </button>
+                ) : (
                 <button
                   className={`${styles.marker} ${
                     hs.icon ? styles.markerImg : ""
@@ -762,7 +816,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                     i + 1
                   )}
                 </button>
-                {mode === "view" && openPopupId === hs.id && (
+                )}
+                {mode === "view" && openPopupId === hs.id && hs.type !== "text" && (
                   <div className={styles.popup}>
                     <h4>{hs.label || "Untitled"}</h4>
                     {hs.type === "scene" && hs.targetSceneId && (
@@ -1013,6 +1068,71 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                   Test grid
                 </button>
               </div>
+
+              <label>Starting view</label>
+              <p className={styles.note}>
+                Where the camera faces when this scene opens.
+              </p>
+              <div className={styles.imageBtns}>
+                <button className={styles.btn} onClick={setStartFromCurrent}>
+                  Use current view
+                </button>
+                <button
+                  className={`${styles.btn} ${styles.ghost}`}
+                  onClick={previewStartView}
+                >
+                  Preview
+                </button>
+              </div>
+              <div className={styles.coords}>
+                <div>
+                  <label>Yaw°</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={Math.round(activeScene.initialYaw)}
+                    onChange={(e) =>
+                      updateStartView({
+                        initialYaw: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Pitch°</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={Math.round(activeScene.initialPitch)}
+                    onChange={(e) =>
+                      updateStartView({
+                        initialPitch: Math.max(
+                          -85,
+                          Math.min(85, parseFloat(e.target.value) || 0)
+                        ),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label>FOV°</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min={30}
+                    max={100}
+                    value={Math.round(activeScene.initialFov || DEFAULT_FOV)}
+                    onChange={(e) =>
+                      updateStartView({
+                        initialFov: Math.max(
+                          30,
+                          Math.min(100, parseFloat(e.target.value) || DEFAULT_FOV)
+                        ),
+                      })
+                    }
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -1053,7 +1173,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               >
                 <span className={styles.dot} />
                 <span className={styles.name}>
-                  {i + 1}. {hs.label || "Untitled"}
+                  {i + 1}.{" "}
+                  {hs.label || (hs.type === "text" && hs.content) || "Untitled"}
                 </span>
                 <span className={styles.co}>
                   {hs.yaw.toFixed(0)}°, {hs.pitch.toFixed(0)}°
@@ -1136,10 +1257,18 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 </>
               )}
 
-              <label>Content (shown on click in View mode)</label>
+              <label>
+                {selected.type === "text"
+                  ? "Text (shown on the panorama)"
+                  : "Content (shown on click in View mode)"}
+              </label>
               <textarea
                 value={selected.content}
-                placeholder="Description, caption, anything…"
+                placeholder={
+                  selected.type === "text"
+                    ? "Type the text to place in the scene…"
+                    : "Description, caption, anything…"
+                }
                 onChange={(e) => updateSelected({ content: e.target.value })}
               />
 
@@ -1154,6 +1283,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 </>
               )}
 
+              {selected.type !== "text" && (
+              <>
               <label>Pin icon</label>
               {(() => {
                 const color = selected.iconColor || DEFAULT_PIN_COLOR;
@@ -1280,6 +1411,69 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                           iconSize: Math.max(
                             12,
                             Math.min(160, parseInt(e.target.value, 10) || 40)
+                          ),
+                        })
+                      }
+                    />
+                  </div>
+                </>
+              )}
+              </>
+              )}
+
+              {selected.type === "text" && (
+                <>
+                  <label>Text color</label>
+                  <div className={styles.colorRow}>
+                    {PIN_COLORS.map((c) => {
+                      const cur = selected.iconColor || "#ffffff";
+                      return (
+                        <button
+                          type="button"
+                          key={c}
+                          title={c}
+                          className={`${styles.swatch} ${
+                            cur.toLowerCase() === c.toLowerCase()
+                              ? styles.swatchSel
+                              : ""
+                          }`}
+                          style={{ background: c }}
+                          onClick={() => updateSelected({ iconColor: c })}
+                        />
+                      );
+                    })}
+                    <input
+                      type="color"
+                      className={styles.colorInput}
+                      value={selected.iconColor || "#ffffff"}
+                      onChange={(e) =>
+                        updateSelected({ iconColor: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <label>Text size — {selected.fontSize ?? DEFAULT_TEXT_SIZE}px</label>
+                  <div className={styles.sizeRow}>
+                    <input
+                      type="range"
+                      min={10}
+                      max={120}
+                      step={1}
+                      value={selected.fontSize ?? DEFAULT_TEXT_SIZE}
+                      onChange={(e) =>
+                        updateSelected({ fontSize: parseInt(e.target.value, 10) })
+                      }
+                    />
+                    <input
+                      type="number"
+                      min={10}
+                      max={120}
+                      value={selected.fontSize ?? DEFAULT_TEXT_SIZE}
+                      onChange={(e) =>
+                        updateSelected({
+                          fontSize: Math.max(
+                            10,
+                            Math.min(120, parseInt(e.target.value, 10) || DEFAULT_TEXT_SIZE)
                           ),
                         })
                       }

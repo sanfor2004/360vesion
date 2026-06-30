@@ -11,8 +11,11 @@ export type Projection = "equirectangular" | "cubemap";
 /** Who can see a tour. `draft` = owner only; `unlisted` = anyone with the link. */
 export type Visibility = "draft" | "public" | "unlisted";
 
-/** What happens when a viewer selects a hotspot. */
-export type HotspotType = "info" | "link" | "scene" | "media";
+/**
+ * What a hotspot is / does. `info` & `media` open a panel; `link` opens a URL;
+ * `scene` navigates; `text` renders its text directly on the panorama (no pin).
+ */
+export type HotspotType = "info" | "link" | "scene" | "media" | "text";
 
 /** A stored panorama image and its variants. */
 export interface ImageAsset {
@@ -50,10 +53,15 @@ export interface Hotspot {
    * recolorable teardrop; an absolute path/URL is a user-uploaded image.
    */
   icon?: string;
-  /** Pin color for built-in glyph pins (hex). Defaults to the teal brand color. */
+  /**
+   * For pin hotspots: pin color for built-in glyph pins (hex). For `text`
+   * hotspots: the text color. Defaults to the teal brand color (pins) / white (text).
+   */
   iconColor?: string;
   /** Rendered size in px for a custom uploaded icon (default 40). */
   iconSize?: number;
+  /** Font size in px for `text` hotspots (default 18). */
+  fontSize?: number;
 }
 
 /** One panorama and its hotspots. */

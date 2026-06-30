@@ -137,15 +137,42 @@ function pinHtml(h: Hotspot): string {
     width="${GLYPH_SIZE}" height="${GLYPH_SIZE}" style="display:block;cursor:pointer" alt="" />`;
 }
 
+/** Escape user text before injecting it into a marker's HTML. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Default font size (px) for a `text` hotspot. */
+export const DEFAULT_TEXT_SIZE = 18;
+
+/** Inline HTML for a free-floating `text` hotspot (no pin background). */
+function textHtml(h: Hotspot): string {
+  const color = h.iconColor || "#ffffff";
+  const size = h.fontSize ?? DEFAULT_TEXT_SIZE;
+  const text = escapeHtml(h.content || h.label || "Text").replace(/\n/g, "<br/>");
+  return (
+    `<div style="color:${color};font:600 ${size}px/1.3 system-ui,sans-serif;` +
+    `text-align:center;white-space:pre-wrap;max-width:42vw;` +
+    `text-shadow:0 1px 3px rgba(0,0,0,.85),0 0 2px rgba(0,0,0,.7)">${text}</div>`
+  );
+}
+
 /** A Photo Sphere Viewer markers-plugin config for one hotspot. */
 export function markerForHotspot(h: Hotspot) {
   const base = {
     id: h.id,
     position: { yaw: `${h.yaw}deg`, pitch: `${h.pitch}deg` },
-    tooltip: h.label || undefined,
+    tooltip: h.type === "text" ? undefined : h.label || undefined,
     data: h,
     anchor: "center center",
   };
+  if (h.type === "text") {
+    return { ...base, html: textHtml(h) };
+  }
   if (h.icon) {
     const key = glyphKey(h.icon);
     const s = h.iconSize ?? 40;
@@ -167,6 +194,9 @@ export type MarkerAction =
 /** Decide what selecting a hotspot should do, based on its type. */
 export function actionForHotspot(h: Hotspot): MarkerAction {
   switch (h.type) {
+    case "text":
+      // The text is rendered in-scene; selecting it does nothing.
+      return { kind: "none" };
     case "link":
       return h.url ? { kind: "link", url: h.url } : { kind: "none" };
     case "scene":
