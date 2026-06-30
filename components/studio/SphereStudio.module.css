@@ -116,7 +116,48 @@
 }
 .toolbarBtns {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+/* ---- auto-save status (replaces the manual Save button) ---- */
+.autosave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  padding: 0 2px;
+}
+.autosave[data-state="saving"] {
+  color: var(--amber);
+}
+.autosave[data-state="saved"] {
+  color: var(--teal);
+}
+.autosave[data-state="error"] {
+  color: var(--danger);
+}
+.savedTick {
+  font-size: 13px;
+  line-height: 1;
+}
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .scenePreview {
   width: 100%;
@@ -441,6 +482,15 @@
 }
 .markerText:hover {
   border-color: rgba(255, 255, 255, 0.3);
+}
+/* In edit mode, hovering the border reveals a move handle for dragging. */
+.markerTextDraggable {
+  cursor: move;
+}
+.markerTextDraggable:hover {
+  border-style: dashed;
+  border-color: var(--teal);
+  background: rgba(13, 15, 19, 0.35);
 }
 .markerTextSel {
   border-color: var(--amber);

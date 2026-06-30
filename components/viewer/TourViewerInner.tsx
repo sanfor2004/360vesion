@@ -131,6 +131,9 @@ export default function TourViewerInner({ tour }: TourViewerInnerProps) {
           yaw: `${currentScene.initialYaw}deg`,
           pitch: `${currentScene.initialPitch}deg`,
         },
+        // Apply the scene's starting zoom too, so the full starting view is
+        // restored on every entry — not just yaw/pitch the first time.
+        zoom: fovToZoom(currentScene.initialFov || DEFAULT_FOV),
       })
       .then(() => {
         markers.setMarkers(currentScene.hotspots.map(markerForHotspot));

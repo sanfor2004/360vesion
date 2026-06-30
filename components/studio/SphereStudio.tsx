@@ -76,6 +76,9 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
 
   // ---- collapsible right-panel sections ----
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
@@ -105,6 +108,11 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const previewUrlRef = useRef<string | null>(null);
   const fileImgRef = useRef<HTMLInputElement>(null);
   const iconFileRef = useRef<HTMLInputElement>(null);
+
+  // ---- auto-save bookkeeping (logic lives in the auto-save section below) ----
+  const readyRef = useRef(false);
+  const lastSavedRef = useRef("");
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const three = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -491,20 +499,43 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     (async () => {
       try {
         const tour = await fetchTour(tourId);
-        if (cancelled || !tour || tour.scenes.length === 0) return;
+        if (cancelled) return;
+        if (!tour || tour.scenes.length === 0) {
+          // Brand-new tour — nothing to load; enable auto-save so the first edit
+          // creates it. (lastSavedRef stays "" ≠ default sig, so the very first
+          // change persists.)
+          readyRef.current = true;
+          return;
+        }
+        const description = tour.description ?? "";
+        const visibility = tour.visibility ?? "draft";
+        const startSceneId = tour.startSceneId || tour.scenes[0].id;
         setTitle(tour.title);
-        setDescription(tour.description ?? "");
-        setVisibility(tour.visibility ?? "draft");
+        setDescription(description);
+        setVisibility(visibility);
         setCreatedAt(tour.createdAt);
         skipHistory.current = true; // loading a tour isn't an undoable edit
         setScenes(tour.scenes);
-        setStartSceneId(tour.startSceneId || tour.scenes[0].id);
+        setStartSceneId(startSceneId);
         const start =
           tour.scenes.find((s) => s.id === tour.startSceneId) ?? tour.scenes[0];
         setActiveId(start.id);
         applyFraming(start);
         setStatus(`Loaded "${tour.title}" (${tour.scenes.length} scene(s))`);
+        // Record what we just loaded as "saved" so applying it doesn't trigger
+        // an auto-save, then allow future edits to save.
+        lastSavedRef.current = tourSig({
+          scenes: tour.scenes,
+          title: tour.title,
+          description,
+          visibility,
+          startSceneId,
+        });
+        setSaveState("saved");
+        readyRef.current = true;
       } catch (err) {
+        // On load failure we deliberately DON'T enable auto-save: saving the
+        // default scene could overwrite an existing tour we just failed to read.
         if (!cancelled) setStatus((err as Error).message);
       }
     })();
@@ -519,13 +550,11 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const switchScene = (id: string) => {
     if (id === activeId) return;
     revokePreview();
-    // Snapshot the live camera into the OUTGOING scene NOW, before applyFraming
-    // moves the camera to the incoming scene. (A setScenes updater would run
-    // after applyFraming and capture the wrong orientation.)
-    const captured = captureFraming(scenes, activeId);
-    skipHistory.current = true; // a framing snapshot on switch isn't a discrete edit
-    setScenes(captured);
-    const incoming = captured.find((s) => s.id === id);
+    // Each scene's starting view is set explicitly (Scene settings → Starting
+    // view), so switching must NOT capture the live camera here — doing so would
+    // overwrite the outgoing scene's saved start view with wherever you happen
+    // to be looking, and "back" would no longer return to its start view.
+    const incoming = scenes.find((s) => s.id === id);
     setActiveId(id);
     setSelectedId(null);
     setOpenPopupId(null);
@@ -535,9 +564,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const addScene = () => {
     revokePreview();
     const sc = makeScene(`Scene ${scenes.length + 1}`);
-    // Snapshot the current scene's framing BEFORE the camera moves to the new one.
-    const captured = captureFraming(scenes, activeId);
-    setScenes([...captured, sc]);
+    setScenes((prev) => [...prev, sc]);
     setActiveId(sc.id);
     setSelectedId(null);
     setOpenPopupId(null);
@@ -688,33 +715,62 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
 
   // ---------------------------------------------------------------- save/export
   const buildTour = useCallback((): Tour => {
-    const captured = captureFraming(scenes, activeId);
+    // Don't snapshot the live camera here — each scene's starting view is set
+    // explicitly via Scene settings, so saving must persist those stored values
+    // rather than overwrite them with wherever the camera is pointing now.
     const now = new Date().toISOString();
     return {
       id: tourId,
       title,
       description,
       visibility,
-      startSceneId: startSceneId || captured[0].id,
-      scenes: captured,
+      startSceneId: startSceneId || scenes[0].id,
+      scenes,
       createdAt: createdAt ?? now,
       updatedAt: now,
     };
-  }, [scenes, activeId, captureFraming, tourId, title, description, visibility, startSceneId, createdAt]);
+  }, [scenes, tourId, title, description, visibility, startSceneId, createdAt]);
 
-  const onSave = async () => {
-    setBusy(true);
-    setStatus("Saving…");
+  // ---------------------------------------------------------------- auto-save
+  // The studio saves itself: any change to the tour schedules a debounced save,
+  // and the toolbar shows live "Saving…/Saved" status instead of a Save button.
+  // (readyRef / lastSavedRef / saveTimerRef are declared with the other refs so
+  // the load effect above can use them.)
+
+  // Signature of everything we persist; a change here means there's work to save.
+  const sig = useMemo(
+    () => tourSig({ scenes, title, description, visibility, startSceneId }),
+    [scenes, title, description, visibility, startSceneId]
+  );
+
+  // Keep the latest builder in a ref so the debounced timer always saves fresh
+  // state regardless of which render scheduled it.
+  const buildTourRef = useRef(buildTour);
+  buildTourRef.current = buildTour;
+
+  const autoSave = useCallback(async (savingSig: string) => {
+    setSaveState("saving");
     try {
-      const saved = await saveTour(tourId, buildTour());
+      const saved = await saveTour(tourId, buildTourRef.current());
       setCreatedAt(saved.createdAt);
-      setStatus(`Saved at ${new Date(saved.updatedAt).toLocaleTimeString()}`);
+      lastSavedRef.current = savingSig;
+      setSaveState("saved");
     } catch (err) {
+      setSaveState("error");
       setStatus((err as Error).message);
-    } finally {
-      setBusy(false);
     }
-  };
+  }, [tourId]);
+
+  useEffect(() => {
+    if (!readyRef.current) return;
+    if (sig === lastSavedRef.current) return;
+    setSaveState("saving"); // immediate feedback while the debounce settles
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => autoSave(sig), 1000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [sig, autoSave]);
 
   const onExport = () => {
     download(
@@ -743,6 +799,67 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     setMode(m);
     setOpenPopupId(null);
     if (m === "view") setSelectedId(null);
+  };
+
+  // ---------------------------------------------------------------- drag text
+  // Text hotspots can be repositioned by grabbing their (hover-highlighted)
+  // border and dragging — we raycast the pointer onto the sphere to get the new
+  // yaw/pitch. A click that doesn't move just selects the hotspot.
+  const textDragRef = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  const onTextPointerDown = (e: React.PointerEvent, id: string) => {
+    if (mode !== "edit") return; // drag-to-move is an authoring action
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    textDragRef.current = { id, startX: e.clientX, startY: e.clientY, moved: false };
+  };
+
+  const onTextPointerMove = (e: React.PointerEvent) => {
+    const d = textDragRef.current;
+    const t = three.current;
+    if (!d || !t) return;
+    if (!d.moved) {
+      if (Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) < 4)
+        return;
+      d.moved = true;
+      suppressClickRef.current = true; // the trailing click shouldn't toggle select
+      setSelectedId(d.id);
+      // Record one undo step covering the whole drag, then skip the per-move
+      // snapshots so Ctrl+Z reverts the move in a single step.
+      undoStack.current.push(prevScenesRef.current);
+      if (undoStack.current.length > 100) undoStack.current.shift();
+    }
+    t.raycaster.setFromCamera(
+      ndcFromEvent(e.nativeEvent, t.renderer.domElement),
+      t.camera
+    );
+    const hit = t.raycaster.intersectObject(t.sphere)[0];
+    if (!hit) return;
+    const dir = worldToDir(hit.point);
+    skipHistory.current = true;
+    setActiveHotspots((hs) =>
+      hs.map((h) =>
+        h.id === d.id
+          ? { ...h, yaw: +dir.yaw.toFixed(2), pitch: +dir.pitch.toFixed(2) }
+          : h
+      )
+    );
+  };
+
+  const onTextPointerUp = (e: React.PointerEvent) => {
+    if (!textDragRef.current) return;
+    textDragRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
   };
 
   const otherScenes = scenes.filter((s) => s.id !== activeId);
@@ -776,14 +893,21 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 {hs.type === "text" ? (
                   <button
                     className={`${styles.markerText} ${
-                      hs.id === selectedId ? styles.markerTextSel : ""
-                    }`}
+                      mode === "edit" ? styles.markerTextDraggable : ""
+                    } ${hs.id === selectedId ? styles.markerTextSel : ""}`}
                     style={{
                       color: hs.iconColor || "#ffffff",
                       fontSize: hs.fontSize ?? DEFAULT_TEXT_SIZE,
                     }}
+                    onPointerDown={(e) => onTextPointerDown(e, hs.id)}
+                    onPointerMove={onTextPointerMove}
+                    onPointerUp={onTextPointerUp}
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (suppressClickRef.current) {
+                        suppressClickRef.current = false;
+                        return;
+                      }
                       select(hs.id);
                     }}
                   >
@@ -899,15 +1023,36 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               </button>
             </div>
             <div className={styles.toolbarBtns}>
+              <div
+                className={styles.autosave}
+                data-state={saveState}
+                role="status"
+                aria-live="polite"
+                title={
+                  saveState === "error"
+                    ? "Couldn't save — changes will retry on the next edit"
+                    : "Changes save automatically"
+                }
+              >
+                {saveState === "saving" && (
+                  <>
+                    <span className={styles.spinner} aria-hidden />
+                    Saving…
+                  </>
+                )}
+                {saveState === "saved" && (
+                  <>
+                    <span className={styles.savedTick} aria-hidden>
+                      ✓
+                    </span>
+                    Saved
+                  </>
+                )}
+                {saveState === "error" && <>Save failed</>}
+                {saveState === "idle" && <>Auto-save on</>}
+              </div>
               <button className={styles.btn} onClick={onExport}>
                 Export
-              </button>
-              <button
-                className={`${styles.btn} ${styles.primary}`}
-                onClick={onSave}
-                disabled={busy}
-              >
-                Save
               </button>
             </div>
           </div>
@@ -1598,6 +1743,17 @@ function buildTestPanorama(): THREE.CanvasTexture {
     x.fillText(i * 30 + "°", (i / 12) * w + 90, h / 2 + 70);
   }
   return new THREE.CanvasTexture(c);
+}
+
+/** Stable string of everything the studio persists — used to detect changes. */
+function tourSig(d: {
+  scenes: Scene[];
+  title: string;
+  description: string;
+  visibility: Visibility;
+  startSceneId: string;
+}): string {
+  return JSON.stringify(d);
 }
 
 function download(name: string, text: string, type: string) {
