@@ -1,19 +1,15 @@
 // Prisma schema for 360Vision.
 //
-// DATABASE: MySQL (hosted). The connection string lives in DATABASE_URL (.env).
-// Schema changes are synced with `npm run db:push` (Prisma `db push`) — this host
-// is shared MySQL and does not allow the shadow database that `migrate dev`
-// needs, so we sync the schema directly rather than keeping a migration history.
-//
-// Column-type notes: OAuth tokens and tour descriptions can exceed MySQL's
-// default VARCHAR(191), so they use @db.Text; URL-bearing columns are widened.
+// DATABASE: SQLite. The connection string lives in DATABASE_URL (.env).
+// Schema changes are synced with `npm run db:push` for a lightweight local
+// development workflow.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -26,13 +22,13 @@ model User {
   name          String?
   email         String?   @unique
   emailVerified DateTime?
-  image         String?   @db.VarChar(1024)
+  image         String?
 
   // Community profile + credentials
   username     String? @unique // public handle → /u/<username>
   passwordHash String? // set only for email/password sign-ups
-  bio          String? @db.VarChar(1024)
-  website      String? @db.VarChar(512)
+  bio          String?
+  website      String?
 
   createdAt DateTime @default(now())
 
@@ -47,12 +43,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -84,13 +80,11 @@ model Tour {
   id          String    @id @default(cuid())
   ownerId     String
   slug        String // unique per owner; pretty handle for the tour
-  title       String    @db.VarChar(512)
-  // No @default: MySQL/MariaDB reject literal defaults on TEXT columns, and every
-  // write path (createTour/saveTour) already supplies a value.
-  description String    @db.Text
+  title       String
+  description String
   visibility  String    @default("draft") // draft | public | unlisted
-  coverUrl    String?   @db.VarChar(1024)
-  data        Json // the full Tour shape { scenes, hotspots, ... } (lib/types.ts)
+  coverUrl    String?
+  data        String // JSON string: { scenes, hotspots, ... } (lib/types.ts)
   viewCount   Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

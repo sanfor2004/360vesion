@@ -1,12 +1,11 @@
 /**
- * Tour persistence. SEAM: backed by Prisma on MySQL (to move to another engine,
- * change only prisma/schema.prisma's datasource + DATABASE_URL). The tour's
- * scenes/hotspots live in the `data` Json column; community metadata
+ * Tour persistence. SEAM: backed by Prisma on SQLite. The tour's scenes and
+ * hotspots live in the `data` JSON string; community metadata
  * (owner/slug/visibility/cover/timestamps) lives in real columns for querying.
  *
  * Server-only.
  */
-import type { Prisma, Tour as TourRow } from "@prisma/client";
+import type { Tour as TourRow } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { Scene, Tour, Visibility } from "./types";
 
@@ -48,9 +47,14 @@ async function uniqueSlug(ownerId: string, title: string, excludeId?: string): P
   return `${base}-${Date.now()}`;
 }
 
-/** DB row → app Tour shape (merges the Json `data` with the columns). */
+/** DB row → app Tour shape (merges the JSON `data` with the columns). */
 function rowToTour(row: RowWithOwner): Tour {
-  const data = (row.data ?? {}) as { startSceneId?: string; scenes?: Scene[] };
+  let data: { startSceneId?: string; scenes?: Scene[] } = {};
+  try {
+    data = JSON.parse(row.data || "{}") as { startSceneId?: string; scenes?: Scene[] };
+  } catch {
+    data = {};
+  }
   const scenes = data.scenes ?? [];
   return {
     id: row.id,
@@ -70,12 +74,12 @@ function rowToTour(row: RowWithOwner): Tour {
   };
 }
 
-/** The Json blob we store in the `data` column. */
-function dataFor(input: Partial<Tour>): Prisma.InputJsonValue {
-  return {
+/** The JSON blob we store in the `data` column. */
+function dataFor(input: Partial<Tour>): string {
+  return JSON.stringify({
     startSceneId: input.startSceneId ?? input.scenes?.[0]?.id ?? "",
-    scenes: (input.scenes ?? []) as unknown as Prisma.InputJsonValue,
-  };
+    scenes: input.scenes ?? [],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +112,8 @@ export async function listTours(): Promise<Tour[]> {
 /** Public Explore feed — published tours, newest first. */
 export async function listPublicTours(opts?: { take?: number; cursor?: string }): Promise<Tour[]> {
   const take = opts?.take ?? 48;
+  if (!process.env.DATABASE_URL) return [];
+
   try {
     const rows = await prisma.tour.findMany({
       where: { visibility: "public" },
@@ -196,9 +202,16 @@ export async function saveTour(id: string, input: Partial<Tour>): Promise<Tour |
 
   const visibility = (input.visibility ?? (existing.visibility as Visibility)) as Visibility;
   const title = input.title ?? existing.title;
-  const scenes = input.scenes ?? ((existing.data as { scenes?: Scene[] }).scenes ?? []);
+  let existingData: { startSceneId?: string; scenes?: Scene[] } = {};
+  try {
+    existingData = JSON.parse(existing.data || "{}") as { startSceneId?: string; scenes?: Scene[] };
+  } catch {
+    existingData = {};
+  }
+
+  const scenes = input.scenes ?? existingData.scenes ?? [];
   const startSceneId =
-    input.startSceneId ?? (existing.data as { startSceneId?: string }).startSceneId ?? scenes[0]?.id ?? "";
+    input.startSceneId ?? existingData.startSceneId ?? scenes[0]?.id ?? "";
 
   // First publish stamps publishedAt; going back to draft clears it.
   let publishedAt = existing.publishedAt;

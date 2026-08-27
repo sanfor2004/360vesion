@@ -1,12 +1,17 @@
 # dependencies
-/node_modules
+node_modules/
 
-# next.js
-/.next
-/out
+# framework/build output
+.next/
+out/
+build/
+dist/
 
-# production
-/build
+# caches
+.turbo/
+.swc/
+.cache/
+coverage/
 
 # typescript
 *.tsbuildinfo
@@ -17,14 +22,25 @@ next-env.d.ts
 !/public/uploads/.gitkeep
 /data/tours/*
 !/data/tours/.gitkeep
+/prisma/*.db
+/prisma/*.db-journal
+/prisma/*.db-wal
+/prisma/*.db-shm
 
 # env
 .env
-.env.local
-.env*.local
+.env.*
+!.env.example
 
 # misc
 .DS_Store
+Thumbs.db
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-.vercel
+# deployment metadata
+.vercel/
+.netlify/

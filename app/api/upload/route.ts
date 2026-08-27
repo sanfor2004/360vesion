@@ -78,11 +78,9 @@ export async function POST(req: Request) {
     const result: UploadResult = { url, width, height, mobileUrl, thumbnailUrl };
     return Response.json(result, { status: 201 });
   } catch (err) {
-    // On serverless (e.g. Vercel) the local disk is read-only, so this fails
-    // until BLOB_READ_WRITE_TOKEN is configured. Surface a clear message.
     console.error("[upload] storage failed:", err);
     return Response.json(
-      { error: "Could not store the image. Configure blob storage (BLOB_READ_WRITE_TOKEN)." },
+      { error: "Could not store the image. Check server upload storage configuration." },
       { status: 500 }
     );
   }

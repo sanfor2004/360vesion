@@ -42,8 +42,8 @@ export async function generateUsername(seed: string): Promise<string> {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
-  // Self-hosted (not Vercel): trust the deployment host. Otherwise Auth.js rejects
-  // requests with UntrustedHost in production.
+  // Trust the configured deployment host. Otherwise Auth.js rejects production
+  // requests with UntrustedHost.
   trustHost: true,
   pages: { signIn: "/login" },
   providers: [
@@ -122,7 +122,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   } catch (err) {
     // A missing AUTH_SECRET or a DB hiccup during the session lookup must not 500
     // every page that renders the header — degrade to "logged out" and log the
-    // real cause (visible in the server/Vercel logs).
+    // real cause in the server logs.
     console.error("[auth] getCurrentUser failed:", err);
     return null;
   }

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[upload/icon] storage failed:", err);
     return Response.json(
-      { error: "Could not store the image. Configure blob storage (BLOB_READ_WRITE_TOKEN)." },
+      { error: "Could not store the image. Check server upload storage configuration." },
       { status: 500 }
     );
   }
