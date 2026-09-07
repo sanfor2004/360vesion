@@ -1,7 +1,7 @@
 /**
  * Typed fetch wrappers used by the studio + dashboard (client-side). Auth is the
- * Auth.js session cookie (sent automatically on same-origin requests) — no bearer
- * token. The viewer reads public tours with a plain fetch.
+ * The local studio has no login/session layer. All requests target the same
+ * machine and persist to the project's SQLite database.
  */
 import type { Tour, UploadResult } from "./types";
 
@@ -55,6 +55,15 @@ export async function uploadIcon(file: File): Promise<{ url: string }> {
   form.append("file", file);
   const res = await fetch("/api/upload/icon", { method: "POST", body: form });
   if (!res.ok) throw new Error(await errorMessage(res, "icon upload"));
+  return res.json();
+}
+
+/** Upload an architectural floor plan without panorama aspect-ratio rules. */
+export async function uploadFloorPlan(file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/upload/floor-plan", { method: "POST", body: form });
+  if (!res.ok) throw new Error(await errorMessage(res, "floor plan upload"));
   return res.json();
 }
 

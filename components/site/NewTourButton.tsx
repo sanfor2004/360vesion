@@ -3,13 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createTour } from "@/lib/api-client";
+import { ActionButton, type ButtonSize, type ButtonTone } from "@/components/ui";
 
 export default function NewTourButton({
   className,
   label = "+ New tour",
+  tone,
+  size,
 }: {
   className?: string;
   label?: string;
+  tone?: ButtonTone;
+  size?: ButtonSize;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -26,8 +31,8 @@ export default function NewTourButton({
   };
 
   return (
-    <button className={className} onClick={create} disabled={busy}>
+    <ActionButton className={className} tone={tone} size={size} onClick={create} disabled={busy}>
       {busy ? "Creating…" : label}
-    </button>
+    </ActionButton>
   );
 }

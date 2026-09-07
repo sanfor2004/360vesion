@@ -1,8 +1,8 @@
 /**
- * POST /api/tours  (auth) — create a tour owned by the signed-in user.
+ * POST /api/tours         — create a tour in the local workspace.
  * GET  /api/tours          — list PUBLIC tours (the Explore feed).
  */
-import { getCurrentUser, unauthorized } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { createTour, listPublicTours } from "@/lib/store";
 import { tourInputSchema } from "@/lib/schema";
 
@@ -15,7 +15,6 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user) return unauthorized();
 
   const body = await req.json().catch(() => null);
   const parsed = tourInputSchema.safeParse(body ?? {});

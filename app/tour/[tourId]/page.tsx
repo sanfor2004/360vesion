@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import TourViewer from "@/components/viewer/TourViewer";
 import ShareButton from "@/components/site/ShareButton";
-import { getCurrentUser } from "@/lib/auth";
 import { getTour, incrementViewCount } from "@/lib/store";
 
 /** Best cover image for OG/Twitter cards. */
@@ -77,13 +76,7 @@ export default async function TourPage({
   const tour = await getTour(tourId);
 
   const notFound = !tour || tour.scenes.length === 0;
-  let forbidden = false;
-  if (tour && tour.visibility === "draft") {
-    const user = await getCurrentUser();
-    forbidden = !user || user.id !== tour.ownerId;
-  }
-
-  if (notFound || forbidden) {
+  if (notFound) {
     return (
       <main style={{ padding: 48, maxWidth: 640, margin: "0 auto", lineHeight: 1.6 }}>
         <h1>Tour not found</h1>

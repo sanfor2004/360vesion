@@ -2,8 +2,8 @@
   --panel: #1a1e25;
   --panel2: #20252e;
   --line: #2c333d;
-  --amber: #e8a33d;
-  --teal: #4fd1c5;
+  --amber: #ff8a32;
+  --teal: #16c7e8;
   --danger: #e5707a;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   display: flex;
@@ -220,6 +220,73 @@
   font-family: var(--mono);
   margin-top: 2px;
 }
+
+/* ---- optional floor-plan authoring ---- */
+.mapEditor {
+  padding: 13px 16px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.mapEditor > label:not(.enableRow) {
+  display: block;
+  margin: 10px 0 5px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mapEditor > input,
+.mapEditor > select {
+  width: 100%;
+  margin: 0 0 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.enableRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.enableRow > span { display: flex; flex-direction: column; gap: 2px; }
+.enableRow b { font-size: 12.5px; }
+.enableRow small { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+.enableRow :global(.toggle:checked) { background: var(--teal); color: var(--teal); border-color: var(--teal); }
+.floorToolbar { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 8px; }
+.floorToolbar :global(.tabs) { min-width: 0; overflow-x: auto; flex-wrap: nowrap; background: var(--ink); }
+.floorToolbar :global(.tab) { min-width: 54px; color: var(--muted); padding-inline: 8px; }
+.floorToolbar :global(.tab-active) { background: var(--panel2); color: var(--teal); }
+.floorToolbar :global(.btn),.planActions :global(.btn),.mapEditor > :global(.btn) { border-color: var(--line); background: var(--panel2); color: var(--text); }
+.planActions { display: flex; gap: 7px; margin-bottom: 8px; }
+.planActions :global(.btn) { flex: 1; }
+.planPreview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 158px;
+  overflow: hidden;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background-color: #e9e5dd;
+  background-image: linear-gradient(#bbb5a8 1px,transparent 1px),linear-gradient(90deg,#bbb5a8 1px,transparent 1px);
+  background-size: 20px 20px;
+  color: #625e56;
+  cursor: default;
+  font-size: 11px;
+  text-align: center;
+  padding: 14px;
+}
+.planPreviewReady { cursor: crosshair; border-style: solid; }
+.planPreview img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.planPoint,.planPointActive { position: absolute; z-index: 2; width: 11px; height: 11px; transform: translate(-50%,-50%); border: 2px solid white; border-radius: 50%; background: #252522; box-shadow: 0 2px 6px rgba(0,0,0,.4); pointer-events: none; }
+.planPointActive { width: 20px; height: 20px; background: var(--amber); box-shadow: 0 0 0 5px rgba(232,163,61,.28); }
 
 /* ---- scenes list ---- */
 .addScene {
@@ -550,7 +617,17 @@
   border-left: 1px solid var(--line);
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
+}
+.asideBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .ph {
   padding: 12px 16px;
@@ -615,8 +692,6 @@
   color: var(--text);
 }
 .list {
-  flex: 1 1 auto;
-  overflow: auto;
   padding: 8px;
 }
 .row {
@@ -680,9 +755,6 @@
 .editor {
   border-top: 1px solid var(--line);
   padding: 14px 16px;
-  flex: 0 0 auto;
-  overflow: auto;
-  max-height: 55%;
 }
 .editor label {
   display: block;

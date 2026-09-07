@@ -1,6 +1,6 @@
 # 360Vision
 
-360Vision is a Next.js application for creating, publishing, and viewing interactive 360 panorama tours. Creators can upload equirectangular panoramas, place hotspots in a browser-based studio, connect multiple scenes, and share public or unlisted tours from creator profiles.
+360Vision is a local Next.js studio for creating and viewing interactive 360 panorama tours. It opens directly with no account or credentials and stores projects in a local SQLite database.
 
 The app has two main surfaces:
 
@@ -11,14 +11,15 @@ Hotspots are stored as angular coordinates instead of pixels, so tours keep work
 
 ## Features
 
-- Email/password authentication with optional Google OAuth through Auth.js.
-- Creator dashboard, public creator profiles, and an explore feed for published tours.
+- Direct local access with no login, signup, passwords, or sessions.
+- A “My work” dashboard backed by SQLite, plus a gallery for published tours.
 - Draft, public, and unlisted tour visibility.
 - Multi-scene tours with start scene, per-scene camera framing, and cover image selection.
 - Hotspot types for information, links, scene transitions, and media panels.
 - Panorama upload validation for 2:1 equirectangular images.
 - Server-side image processing with Sharp for full, mobile, and thumbnail variants.
-- Prisma-backed persistence for users, sessions, profiles, and tour JSON.
+- Multi-floor architectural maps with click-to-place room navigation.
+- Prisma-backed SQLite persistence for local tour JSON.
 
 ## Tech Stack
 
@@ -26,7 +27,6 @@ Hotspots are stored as angular coordinates instead of pixels, so tours keep work
 - React 19
 - TypeScript
 - Prisma with SQLite
-- Auth.js / NextAuth v5
 - Three.js
 - Photo Sphere Viewer
 - Sharp
@@ -52,7 +52,7 @@ Create a local environment file:
 cp .env.example .env
 ```
 
-Fill in the required values in `.env`, then generate the Prisma client and sync the database schema:
+Generate the Prisma client and sync the local database schema:
 
 ```bash
 npm run db:generate
@@ -74,10 +74,7 @@ All runtime configuration is documented in `.env.example`.
 | Variable | Required | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | SQLite connection string used by Prisma. Defaults to `file:./dev.db` in `.env.example`. |
-| `AUTH_SECRET` | Yes | Auth.js secret. Generate one with `npx auth secret`. |
 | `NEXT_PUBLIC_SITE_URL` | Production | Canonical public URL used for metadata, sitemap, robots.txt, and server-generated share URLs. |
-| `AUTH_GOOGLE_ID` | No | Google OAuth client ID. |
-| `AUTH_GOOGLE_SECRET` | No | Google OAuth client secret. |
 
 Local uploads are written to `public/uploads` and are ignored by git except for the `.gitkeep` placeholder. For production, use a persistent filesystem or replace `lib/storage.ts` with an object storage implementation that returns public image URLs.
 
@@ -97,24 +94,32 @@ Local uploads are written to `public/uploads` and are ignored by git except for 
 
 ```text
 app/                 Next.js routes, pages, metadata, and API handlers
-components/site/     Account, feed, profile, and dashboard UI
+components/site/     Local navigation, gallery, profile, and dashboard UI
+components/ui/       Reusable actions, headers, empty states, and status notices
 components/studio/   Three.js tour authoring studio
 components/viewer/   Public panorama tour viewer
-lib/                 Auth, storage, persistence, validation, and shared helpers
+lib/                 Local identity, storage, persistence, validation, and shared helpers
 prisma/              Prisma schema
 public/              Static assets and upload placeholders
 scripts/             Utility scripts
 data/tours/          Legacy/local data placeholder retained for compatibility
 ```
 
+## Shared UI Components
+
+The site uses Inter as its global interface font. Reusable page and feedback components live in `components/ui`; their props, examples, and contribution guidance are documented in [docs/ui-components.md](docs/ui-components.md).
+
+## Remaining Work
+
+The core local tour workflow is in place. The priority next steps are complete import/export and backup support, safer destructive actions and tour validation, scene organization, accessibility/responsive validation, and persistent infrastructure before any public deployment. See [docs/project-status.md](docs/project-status.md) for the current roadmap.
+
 ## Development Workflow
 
-1. Create or sign in to an account.
-2. Open the dashboard and create a tour.
-3. Upload a 2:1 panorama image.
-4. Add scenes and hotspots in the studio.
-5. Save the tour and choose draft, public, or unlisted visibility.
-6. View public tours through creator profiles, the explore feed, or direct tour URLs.
+1. Open the My work dashboard and create a tour.
+2. Upload a 2:1 panorama image.
+3. Add scenes, hotspots, floors, and map points in the studio.
+4. Changes save automatically to SQLite.
+5. View any local tour directly, including drafts.
 
 The repository includes `public/panoramas/test-grid.jpg` for local testing. Regenerate it with:
 
@@ -130,7 +135,6 @@ For a production deployment, provide:
 
 - A Node.js host that can run Next.js with the Node runtime.
 - A writable SQLite database path reachable through `DATABASE_URL`, or a deliberate Prisma schema change to another database provider.
-- A stable `AUTH_SECRET`.
 - A configured `NEXT_PUBLIC_SITE_URL`.
 - Persistent storage for uploaded images.
 

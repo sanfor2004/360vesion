@@ -9,7 +9,6 @@
  */
 import sharp from "sharp";
 import { v4 as uuid } from "uuid";
-import { getCurrentUser, unauthorized } from "@/lib/auth";
 import { putObject } from "@/lib/storage";
 import { MAX_IMAGE_WIDTH, type UploadResult } from "@/lib/types";
 
@@ -20,8 +19,6 @@ const THUMB_WIDTH = 400;
 const RATIO_TOLERANCE = 0.01; // |w/h - 2| must be within this
 
 export async function POST(req: Request) {
-  if (!(await getCurrentUser())) return unauthorized();
-
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) {

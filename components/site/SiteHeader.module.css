@@ -3,13 +3,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
+  padding: 10px 24px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   position: sticky;
   top: 0;
   z-index: 50;
 }
+.bar :global(.navbar-start) { gap: 13px; }
 
 .brand {
   font-weight: 800;
@@ -18,8 +19,18 @@
   color: var(--text);
   text-decoration: none;
 }
+.brand img { display: block; width: 128px; height: 29px; }
 .brand span {
   color: var(--teal);
+}
+.localBadge {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .13em;
 }
 
 .nav {
@@ -27,6 +38,7 @@
   align-items: center;
   gap: 18px;
 }
+.nav > :global(.btn) { color: var(--primary-content); }
 .nav a {
   color: var(--muted);
   text-decoration: none;
@@ -57,4 +69,10 @@
 }
 .signout:hover {
   color: var(--text);
+}
+
+@media (max-width: 680px) {
+  .bar { padding-inline: 12px; }
+  .localBadge,.nav > a:nth-child(2) { display: none; }
+  .nav { gap: 10px; }
 }

@@ -48,6 +48,27 @@ export const sceneSchema = z.object({
   initialPitch: z.number(),
   initialFov: z.number(),
   hotspots: z.array(hotspotSchema),
+  floorId: z.string().optional(),
+});
+
+export const floorPlanPointSchema = z.object({
+  id: z.string().min(1),
+  sceneId: z.string().min(1),
+  label: z.string(),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+});
+
+export const floorPlanFloorSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  imageUrl: z.string().optional(),
+  points: z.array(floorPlanPointSchema),
+});
+
+export const floorPlanSchema = z.object({
+  enabled: z.boolean(),
+  floors: z.array(floorPlanFloorSchema),
 });
 
 export const tourSchema = z.object({
@@ -57,6 +78,7 @@ export const tourSchema = z.object({
   visibility: visibilitySchema.default("draft"),
   startSceneId: z.string(),
   scenes: z.array(sceneSchema),
+  floorPlan: floorPlanSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -76,6 +98,7 @@ export const tourInputSchema = tourSchema
     // sensible defaults (empty scene list, first scene as start).
     startSceneId: z.string().optional(),
     scenes: z.array(sceneSchema).optional(),
+    floorPlan: floorPlanSchema.optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
   });

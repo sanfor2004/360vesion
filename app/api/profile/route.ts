@@ -1,6 +1,6 @@
 /** PUT /api/profile — update the signed-in user's public profile. */
 import { z } from "zod";
-import { getCurrentUser, unauthorized } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -18,8 +18,6 @@ const schema = z.object({
 
 export async function PUT(req: Request) {
   const user = await getCurrentUser();
-  if (!user) return unauthorized();
-
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

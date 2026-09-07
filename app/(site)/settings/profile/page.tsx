@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ProfileForm from "@/components/site/ProfileForm";
@@ -8,8 +7,6 @@ export const dynamic = "force-dynamic";
 
 export default async function ProfileSettingsPage() {
   const current = await getCurrentUser();
-  if (!current) redirect("/login?next=/settings/profile");
-
   const user = await prisma.user.findUnique({
     where: { id: current.id },
     select: { username: true, name: true, bio: true, website: true },

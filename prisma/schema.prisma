@@ -1,8 +1,4 @@
-// Prisma schema for 360Vision.
-//
-// DATABASE: SQLite. The connection string lives in DATABASE_URL (.env).
-// Schema changes are synced with `npm run db:push` for a lightweight local
-// development workflow.
+// SQLite schema for the single-owner local 360Vision studio.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,84 +9,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------------
-// Auth.js (NextAuth) models — standard adapter shape + our profile fields.
-// ---------------------------------------------------------------------------
-
+// Automatic workspace owner. No credentials or sessions are stored.
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-
-  // Community profile + credentials
-  username     String? @unique // public handle → /u/<username>
-  passwordHash String? // set only for email/password sign-ups
-  bio          String?
-  website      String?
-
+  id        String   @id @default(cuid())
+  name      String?
+  image     String?
+  username  String?  @unique
+  bio       String?
+  website   String?
   createdAt DateTime @default(now())
-
-  accounts Account[]
-  sessions Session[]
-  tours    Tour[]
+  tours     Tour[]
 }
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-// ---------------------------------------------------------------------------
-// Domain
-// ---------------------------------------------------------------------------
 
 model Tour {
   id          String    @id @default(cuid())
   ownerId     String
-  slug        String // unique per owner; pretty handle for the tour
+  slug        String
   title       String
   description String
-  visibility  String    @default("draft") // draft | public | unlisted
+  visibility  String    @default("draft")
   coverUrl    String?
-  data        String // JSON string: { scenes, hotspots, ... } (lib/types.ts)
+  data        String
   viewCount   Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   publishedAt DateTime?
-
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, slug])
   @@index([visibility, publishedAt])

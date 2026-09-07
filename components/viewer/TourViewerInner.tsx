@@ -6,189 +6,180 @@ import { MarkersPlugin } from "@photo-sphere-viewer/markers-plugin";
 import { GyroscopePlugin } from "@photo-sphere-viewer/gyroscope-plugin";
 import { StereoPlugin } from "@photo-sphere-viewer/stereo-plugin";
 import "@photo-sphere-viewer/markers-plugin/index.css";
-import { DEFAULT_FOV, type Hotspot, type Scene, type Tour } from "@/lib/types";
-import {
-  actionForHotspot,
-  isImageUrl,
-  markerForHotspot,
-} from "./hotspot-handlers";
+import { DEFAULT_FOV, type FloorPlanFloor, type Hotspot, type Scene, type Tour } from "@/lib/types";
+import { actionForHotspot, isImageUrl, markerForHotspot } from "./hotspot-handlers";
 import styles from "./TourViewer.module.css";
 
-export interface TourViewerInnerProps {
-  tour: Tour;
-}
+export interface TourViewerInnerProps { tour: Tour }
 
-// Minimal shapes we rely on from PSV (the wrapper's types are loose).
 interface MarkersPluginLike {
-  addEventListener(
-    type: "select-marker",
-    cb: (e: { marker: { id: string } }) => void
-  ): void;
+  addEventListener(type: "select-marker", cb: (e: { marker: { id: string } }) => void): void;
   setMarkers(markers: unknown[]): void;
 }
 interface ViewerLike {
   getPlugin(plugin: unknown): MarkersPluginLike | null;
-  setPanorama(
-    path: string,
-    options?: { position?: { yaw: string; pitch: string }; zoom?: number }
-  ): Promise<unknown>;
+  addEventListener(type: "position-updated", cb: (e: { position: { yaw: number } }) => void): void;
+  setPanorama(path: string, options?: { position?: { yaw: string; pitch: string }; zoom?: number }): Promise<unknown>;
+  animate?: (options: { yaw: string; pitch: string; speed: string }) => Promise<unknown>;
 }
 
 export default function TourViewerInner({ tour }: TourViewerInnerProps) {
-  const startScene =
-    tour.scenes.find((s) => s.id === tour.startSceneId) ?? tour.scenes[0];
-
+  const startScene = tour.scenes.find((scene) => scene.id === tour.startSceneId) ?? tour.scenes[0];
   const [currentId, setCurrentId] = useState(startScene.id);
   const [panel, setPanel] = useState<Hotspot | null>(null);
-
+  const [mapOpen, setMapOpen] = useState(true);
+  const [compass, setCompass] = useState(startScene.initialYaw);
+  const [floorId, setFloorId] = useState(startScene.floorId ?? tour.floorPlan?.floors[0]?.id ?? "");
+  const [autoTour, setAutoTour] = useState(false);
   const viewerRef = useRef<ViewerLike | null>(null);
   const markersRef = useRef<MarkersPluginLike | null>(null);
   const firstRender = useRef(true);
+  const autoTourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentScene = tour.scenes.find((scene) => scene.id === currentId) ?? startScene;
+  const floors = tour.floorPlan?.floors ?? [];
+  const floor: FloorPlanFloor | undefined = floors.find((item) => item.id === floorId) ?? floors[0];
+  const mapAvailable = Boolean(tour.floorPlan?.enabled && floors.length);
 
-  const currentScene: Scene =
-    tour.scenes.find((s) => s.id === currentId) ?? startScene;
+  const navigate = useCallback((sceneId: string) => {
+    const destination = tour.scenes.find((scene) => scene.id === sceneId);
+    if (!destination) return;
+    setPanel(null);
+    setCurrentId(destination.id);
+    if (destination.floorId) setFloorId(destination.floorId);
+  }, [tour.scenes]);
 
-  // What a selected marker does — kept in a ref so the (once-attached) PSV
-  // listener always sees the current scene's hotspots.
+  const sceneBefore = tour.scenes[(tour.scenes.findIndex((scene) => scene.id === currentId) - 1 + tour.scenes.length) % tour.scenes.length];
+  const sceneAfter = tour.scenes[(tour.scenes.findIndex((scene) => scene.id === currentId) + 1) % tour.scenes.length];
+  const autoDestination = useMemo(() => {
+    const connectedId = currentScene.hotspots.find((hotspot) => hotspot.type === "scene" && hotspot.targetSceneId)?.targetSceneId;
+    return tour.scenes.find((scene) => scene.id === connectedId) ?? sceneAfter;
+  }, [currentScene.hotspots, sceneAfter, tour.scenes]);
+
   const selectRef = useRef<(markerId: string) => void>(() => {});
   selectRef.current = (markerId: string) => {
-    const h = currentScene.hotspots.find((x) => x.id === markerId);
-    if (!h) return;
-    const action = actionForHotspot(h);
-    switch (action.kind) {
-      case "link":
-        window.open(action.url, "_blank", "noopener,noreferrer");
-        break;
-      case "panel":
-        setPanel(action.hotspot);
-        break;
-      case "scene":
-        if (tour.scenes.some((s) => s.id === action.targetSceneId)) {
-          setPanel(null);
-          setCurrentId(action.targetSceneId);
-        }
-        break;
-    }
+    const hotspot = currentScene.hotspots.find((item) => item.id === markerId);
+    if (!hotspot) return;
+    const action = actionForHotspot(hotspot);
+    if (action.kind === "link") window.open(action.url, "_blank", "noopener,noreferrer");
+    if (action.kind === "panel") setPanel(action.hotspot);
+    if (action.kind === "scene") navigate(action.targetSceneId);
   };
 
-  // On phones, prefer the smaller mobile image variant for faster loads.
-  const pickUrl = useCallback((s: Scene) => {
-    if (
-      typeof window !== "undefined" &&
-      window.innerWidth <= 768 &&
-      s.image.mobileUrl
-    ) {
-      return s.image.mobileUrl;
-    }
-    return s.image.url;
+  const pickUrl = useCallback((scene: Scene) => {
+    if (typeof window !== "undefined" && window.innerWidth <= 768 && scene.image.mobileUrl) return scene.image.mobileUrl;
+    return scene.image.url;
   }, []);
 
-  const startMarkers = useMemo(
-    () => startScene.hotspots.map(markerForHotspot),
-    [startScene.hotspots]
-  );
-
-  const plugins = useMemo(
-    () =>
-      [
-        GyroscopePlugin,
-        StereoPlugin,
-        [MarkersPlugin, { markers: startMarkers }] as [
-          typeof MarkersPlugin,
-          Record<string, unknown>
-        ],
-      ] as Array<
-        | typeof GyroscopePlugin
-        | typeof StereoPlugin
-        | [typeof MarkersPlugin, Record<string, unknown>]
-      >,
-    [startMarkers]
-  );
+  const startMarkers = useMemo(() => startScene.hotspots.map(markerForHotspot), [startScene.hotspots]);
+  const plugins = useMemo(() => [
+    GyroscopePlugin,
+    StereoPlugin,
+    [MarkersPlugin, { markers: startMarkers }] as [typeof MarkersPlugin, Record<string, unknown>],
+  ] as Array<typeof GyroscopePlugin | typeof StereoPlugin | [typeof MarkersPlugin, Record<string, unknown>]>, [startMarkers]);
 
   const onReady = useCallback((instance: unknown) => {
     const viewer = instance as ViewerLike;
     viewerRef.current = viewer;
     const markers = viewer.getPlugin(MarkersPlugin);
     markersRef.current = markers;
-    markers?.addEventListener("select-marker", (e) =>
-      selectRef.current(e.marker.id)
-    );
+    markers?.addEventListener("select-marker", (event) => selectRef.current(event.marker.id));
+    viewer.addEventListener("position-updated", (event) => setCompass((event.position.yaw * 180) / Math.PI));
   }, []);
 
-  // Navigate when the current scene changes (skip the initial mount, which the
-  // <ReactPhotoSphereViewer src/plugins> props already render).
   useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false;
-      return;
-    }
+    if (firstRender.current) { firstRender.current = false; return; }
     const viewer = viewerRef.current;
     const markers = markersRef.current;
     if (!viewer || !markers) return;
-    viewer
-      .setPanorama(pickUrl(currentScene), {
-        position: {
-          yaw: `${currentScene.initialYaw}deg`,
-          pitch: `${currentScene.initialPitch}deg`,
-        },
-        // Apply the scene's starting zoom too, so the full starting view is
-        // restored on every entry — not just yaw/pitch the first time.
-        zoom: fovToZoom(currentScene.initialFov || DEFAULT_FOV),
-      })
-      .then(() => {
-        markers.setMarkers(currentScene.hotspots.map(markerForHotspot));
-      });
+    viewer.setPanorama(pickUrl(currentScene), {
+      position: { yaw: `${currentScene.initialYaw}deg`, pitch: `${currentScene.initialPitch}deg` },
+      zoom: fovToZoom(currentScene.initialFov || DEFAULT_FOV),
+    }).then(() => markers.setMarkers(currentScene.hotspots.map(markerForHotspot)));
   }, [currentScene, pickUrl]);
 
+  useEffect(() => {
+    if (autoTourTimer.current) clearTimeout(autoTourTimer.current);
+    if (!autoTour || !autoDestination || tour.scenes.length < 2) return;
+
+    // Photo Sphere Viewer supplies this animation method at runtime. If a device/browser
+    // cannot animate it, the timed room-to-room progression remains available.
+    try {
+      const animation = viewerRef.current?.animate?.({
+        yaw: `${currentScene.initialYaw + 330}deg`,
+        pitch: `${currentScene.initialPitch}deg`,
+        speed: "4rpm",
+      });
+      if (animation && typeof (animation as Promise<unknown>).catch === "function") {
+        void (animation as Promise<unknown>).catch(() => undefined);
+      }
+    } catch {
+      // Keep the timed scene progression available if the viewer cannot animate.
+    }
+    autoTourTimer.current = setTimeout(() => navigate(autoDestination.id), 8000);
+    return () => { if (autoTourTimer.current) clearTimeout(autoTourTimer.current); };
+  }, [autoDestination, autoTour, currentScene.initialPitch, currentScene.initialYaw, navigate, tour.scenes.length]);
+
+  const currentPoint = floors.flatMap((item) => item.points.map((point) => ({ ...point, floorId: item.id })))
+    .find((point) => point.sceneId === currentScene.id);
+
   return (
-    <div className={styles.wrap}>
-      <ReactPhotoSphereViewer
-        src={pickUrl(startScene)}
-        defaultYaw={`${startScene.initialYaw}deg`}
-        defaultPitch={`${startScene.initialPitch}deg`}
-        defaultZoomLvl={fovToZoom(startScene.initialFov || DEFAULT_FOV)}
-        // 'gyroscope' enables device-orientation look; 'stereo' is the VR/cardboard mode.
-        navbar={["zoom", "move", "gyroscope", "stereo", "fullscreen"]}
-        plugins={plugins}
-        onReady={onReady}
-        height="100vh"
-        width="100%"
-      />
+    <div className={styles.wrap} data-theme="luxury">
+      <ReactPhotoSphereViewer src={pickUrl(startScene)} defaultYaw={`${startScene.initialYaw}deg`} defaultPitch={`${startScene.initialPitch}deg`} defaultZoomLvl={fovToZoom(startScene.initialFov || DEFAULT_FOV)} navbar={false} plugins={plugins} onReady={onReady} height="100vh" width="100%" />
 
-      {tour.scenes.length > 1 && (
-        <div className={styles.sceneLabel}>{currentScene.name}</div>
-      )}
-
-      {panel && (
-        <div className={styles.panel} role="dialog" aria-label={panel.label}>
-          <button
-            className={styles.close}
-            onClick={() => setPanel(null)}
-            aria-label="Close"
-          >
-            ×
-          </button>
-          <h3>{panel.label || "Untitled"}</h3>
-          {panel.type === "media" && panel.url && isImageUrl(panel.url) && (
-            <img className={styles.media} src={panel.url} alt={panel.label} />
-          )}
-          {panel.content && <p>{panel.content}</p>}
-          {panel.url && !isImageUrl(panel.url) && (
-            <a href={panel.url} target="_blank" rel="noopener noreferrer">
-              Open link ↗
-            </a>
-          )}
+      <div className={styles.topBar}>
+        <img className={styles.brandMark} src="/brand/360vision-mark.svg" alt="360Vision" />
+        <div className={styles.tourTitle}><small>INTERACTIVE PROPERTY TOUR</small><strong>{tour.title}</strong></div>
+        <div className={styles.topActions}>
+          {mapAvailable && <button className="btn btn-sm" onClick={() => setMapOpen((open) => !open)} aria-pressed={mapOpen}>{mapOpen ? "Hide map" : "Show map"}</button>}
+          {tour.scenes.length > 1 && <button className="btn btn-sm btn-square" onClick={() => navigate(sceneBefore.id)} aria-label={`Previous room: ${sceneBefore.name}`} title="Previous room">←</button>}
+          {tour.scenes.length > 1 && <button className={`btn btn-sm ${autoTour ? "btn-primary" : ""}`} onClick={() => setAutoTour((playing) => !playing)} aria-pressed={autoTour}>{autoTour ? "Stop tour" : "Auto tour"}</button>}
+          {tour.scenes.length > 1 && <button className="btn btn-sm btn-square" onClick={() => navigate(sceneAfter.id)} aria-label={`Next room: ${sceneAfter.name}`} title="Next room">→</button>}
+          <button className="btn btn-sm btn-square" onClick={() => document.documentElement.requestFullscreen?.()} aria-label="Enter fullscreen"><ExpandIcon /></button>
         </div>
+      </div>
+
+      <div className={styles.roomBadge}><span className={styles.liveDot} /><div><small>{autoTour ? "AUTO TOUR PLAYING" : "YOU ARE HERE"}</small><strong>{currentScene.name}</strong></div></div>
+      <div className={styles.compass} aria-label={`View direction ${cardinal(compass)}`}><span>{cardinal(compass)}</span><i style={{ transform: `rotate(${compass}deg)` }}>↑</i></div>
+
+      {mapAvailable && mapOpen && floor && (
+        <section className={`${styles.mapCard} card card-sm`} aria-label="Property floor plan">
+          <div className={styles.mapHeader}>
+            <div><small>PROPERTY MAP</small><strong>{floor.name}</strong></div>
+            {floors.length > 1 && <div role="tablist" className="tabs tabs-box tabs-xs">{floors.map((item) => <button key={item.id} role="tab" className={`tab ${item.id === floor.id ? "tab-active" : ""}`} onClick={() => setFloorId(item.id)}>{item.name}</button>)}</div>}
+          </div>
+          <div className={styles.mapCanvas}>
+            {floor.imageUrl ? <img src={floor.imageUrl} alt={`${floor.name} floor plan`} /> : <EmptyPlan />}
+            {floor.points.map((point) => {
+              const active = point.sceneId === currentScene.id;
+              return <button key={point.id} className={`${styles.mapPoint} ${active ? styles.mapPointActive : ""}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => navigate(point.sceneId)} aria-label={`Go to ${point.label}`} title={point.label}><span>{active ? <RadarIcon /> : ""}</span><em>{point.label}</em></button>;
+            })}
+          </div>
+          <div className={styles.mapFooter}><span className={styles.currentKey}><i /> Current location</span><span>{currentPoint ? `${currentPoint.label} · ${floor.name}` : "Choose a room below"}</span></div>
+        </section>
       )}
+
+      <nav className={styles.sceneRail} aria-label="Rooms and spaces">
+        <div className={styles.railLabel}><small>EXPLORE</small><strong>{tour.scenes.length} spaces</strong></div>
+        <div className={styles.sceneScroller}>{tour.scenes.map((scene) => (
+          <button key={scene.id} className={`${styles.sceneCard} ${scene.id === currentScene.id ? styles.sceneCardActive : ""}`} onClick={() => navigate(scene.id)}>
+            <img src={scene.image.thumbnailUrl ?? scene.image.mobileUrl ?? scene.image.url} alt="" /><span>{scene.name}</span>{scene.floorId && <small>{floors.find((item) => item.id === scene.floorId)?.name}</small>}
+          </button>
+        ))}</div>
+      </nav>
+
+      {panel && <div className={`${styles.panel} card card-sm`} role="dialog" aria-label={panel.label}>
+        <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setPanel(null)} aria-label="Close">×</button>
+        <h3 className="card-title">{panel.label || "Untitled"}</h3>
+        {panel.type === "media" && panel.url && isImageUrl(panel.url) && <img className={styles.media} src={panel.url} alt={panel.label} />}
+        {panel.content && <p>{panel.content}</p>}
+        {panel.url && !isImageUrl(panel.url) && <a href={panel.url} target="_blank" rel="noopener noreferrer">Open link ↗</a>}
+      </div>}
     </div>
   );
 }
 
-/**
- * PSV uses a 0–100 zoom level rather than an FOV in degrees:
- * fov 90° → zoom 0 (widest), fov 30° → zoom 100 (tightest).
- */
-function fovToZoom(fov: number): number {
-  const clamped = Math.max(30, Math.min(90, fov));
-  return Math.round(((90 - clamped) / (90 - 30)) * 100);
-}
+function fovToZoom(fov: number) { const clamped = Math.max(30, Math.min(90, fov)); return Math.round(((90 - clamped) / 60) * 100); }
+function cardinal(degrees: number) { const normalized = ((degrees % 360) + 360) % 360; return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(normalized / 45) % 8]; }
+function ExpandIcon() { return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /></svg>; }
+function RadarIcon() { return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="8" opacity=".55" /></svg>; }
+function EmptyPlan() { return <div className={styles.emptyPlan}><div className={styles.blueprintGrid} /><span>Floor plan not uploaded</span></div>; }

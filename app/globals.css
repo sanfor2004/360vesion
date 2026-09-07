@@ -1,3 +1,8 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: luxury --default;
+}
+
 :root {
   --ink: #14171c;
   --panel: #1a1e25;
@@ -5,7 +10,7 @@
   --text: #e6e9ed;
   --muted: #8a94a1;
   --teal: #4fd1c5;
-  --ui: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --ui: "Inter Variable", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {

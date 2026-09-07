@@ -7,7 +7,6 @@
  */
 import sharp from "sharp";
 import { v4 as uuid } from "uuid";
-import { getCurrentUser, unauthorized } from "@/lib/auth";
 import { putObject } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -15,8 +14,6 @@ export const runtime = "nodejs";
 const ICON_SIZE = 80; // stored at 2× the ~40px render size for retina
 
 export async function POST(req: Request) {
-  if (!(await getCurrentUser())) return unauthorized();
-
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) {

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 470">
+  <rect width="800" height="470" fill="#eeeae2"/>
+  <g fill="none" stroke="#282724" stroke-width="9" stroke-linejoin="round">
+    <path d="M68 60H730V405H68Z"/>
+    <path d="M68 235H250V60M250 235H480V60M480 235H730M480 235V405M610 235V405"/>
+    <path d="M250 235V405M68 320H250"/>
+  </g>
+  <g fill="#d8b77a" opacity=".18">
+    <rect x="74" y="66" width="170" height="163"/>
+    <rect x="256" y="66" width="218" height="163"/>
+    <rect x="486" y="66" width="238" height="163"/>
+  </g>
+  <g fill="#555149" font-family="Arial,sans-serif" text-anchor="middle">
+    <text x="158" y="146" font-size="18">KITCHEN</text>
+    <text x="365" y="146" font-size="18">DINING</text>
+    <text x="605" y="146" font-size="18">LIVING ROOM</text>
+    <text x="160" y="285" font-size="14">ENTRY</text>
+    <text x="365" y="325" font-size="18">PRIMARY SUITE</text>
+    <text x="545" y="325" font-size="14">BATH</text>
+    <text x="670" y="325" font-size="14">DRESSING</text>
+  </g>
+  <g stroke="#8e887d" stroke-width="4" fill="none">
+    <path d="M115 60v-20h90v20M530 60v-20h145v20M68 260H40v75h28"/>
+  </g>
+</svg>

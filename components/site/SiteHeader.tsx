@@ -1,35 +1,20 @@
-/** Global top nav for community pages (server component). */
+/** Global navigation for the single-owner local studio. */
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
-import SignOutButton from "./SignOutButton";
+import NewTourButton from "./NewTourButton";
 import styles from "./SiteHeader.module.css";
 
-export default async function SiteHeader() {
-  const user = await getCurrentUser();
+export default function SiteHeader() {
   return (
-    <header className={styles.bar}>
-      <Link href="/" className={styles.brand}>
-        360<span>Vision</span>
-      </Link>
-      <nav className={styles.nav}>
-        <Link href="/explore">Explore</Link>
-        {user ? (
-          <>
-            <Link href="/dashboard">Dashboard</Link>
-            {user.username && (
-              <Link href={`/u/${user.username}`}>My profile</Link>
-            )}
-            <Link href="/settings/profile">Settings</Link>
-            <SignOutButton />
-          </>
-        ) : (
-          <>
-            <Link href="/login">Log in</Link>
-            <Link href="/signup" className={styles.cta}>
-              Sign up
-            </Link>
-          </>
-        )}
+    <header className={`${styles.bar} navbar`} data-theme="luxury">
+      <div className="navbar-start">
+        <Link href="/dashboard" className={styles.brand} aria-label="360Vision dashboard"><img src="/brand/360vision-mark.svg" alt="360Vision" /></Link>
+        <span className={styles.localBadge}>LOCAL STUDIO</span>
+      </div>
+      <nav className={`${styles.nav} navbar-end`}>
+        <Link href="/dashboard">My work</Link>
+        <Link href="/explore">Gallery</Link>
+        <Link href="/demo">Demo</Link>
+        <NewTourButton tone="primary" size="sm" label="+ New tour" />
       </nav>
     </header>
   );

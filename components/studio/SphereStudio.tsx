@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { v4 as uuid } from "uuid";
 import {
   DEFAULT_FOV,
+  type FloorPlan,
   type Hotspot,
   type HotspotType,
   type ImageAsset,
@@ -12,7 +13,7 @@ import {
   type Tour,
   type Visibility,
 } from "@/lib/types";
-import { fetchTour, saveTour, uploadIcon, uploadImage } from "@/lib/api-client";
+import { fetchTour, saveTour, uploadFloorPlan, uploadIcon, uploadImage } from "@/lib/api-client";
 import {
   DEFAULT_PIN_COLOR,
   DEFAULT_TEXT_SIZE,
@@ -52,6 +53,10 @@ function makeScene(name: string): Scene {
   };
 }
 
+function makeFloor(name = "Ground floor") {
+  return { id: uuid(), name, points: [] };
+}
+
 export interface SphereStudioProps {
   /** Tour to load/save. */
   tourId: string;
@@ -67,6 +72,11 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const [title, setTitle] = useState("Untitled tour");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("draft");
+  const [floorPlan, setFloorPlan] = useState<FloorPlan>(() => ({
+    enabled: false,
+    floors: [makeFloor()],
+  }));
+  const [activeFloorId, setActiveFloorId] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
 
   // ---- editing state ----
@@ -87,6 +97,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     scenes: true,
     hotspots: true,
     editor: true,
+    floorPlan: false,
   });
   const toggleSection = useCallback(
     (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] })),
@@ -108,6 +119,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const previewUrlRef = useRef<string | null>(null);
   const fileImgRef = useRef<HTMLInputElement>(null);
   const iconFileRef = useRef<HTMLInputElement>(null);
+  const planFileRef = useRef<HTMLInputElement>(null);
 
   // ---- auto-save bookkeeping (logic lives in the auto-save section below) ----
   const readyRef = useRef(false);
@@ -513,6 +525,13 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
         setTitle(tour.title);
         setDescription(description);
         setVisibility(visibility);
+        const loadedFloorPlan = tour.floorPlan ?? { enabled: false, floors: [makeFloor()] };
+        setFloorPlan(loadedFloorPlan);
+        setActiveFloorId(
+          tour.scenes.find((s) => s.id === startSceneId)?.floorId ??
+            loadedFloorPlan.floors[0]?.id ??
+            ""
+        );
         setCreatedAt(tour.createdAt);
         skipHistory.current = true; // loading a tour isn't an undoable edit
         setScenes(tour.scenes);
@@ -530,6 +549,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           description,
           visibility,
           startSceneId,
+          floorPlan: loadedFloorPlan,
         });
         setSaveState("saved");
         readyRef.current = true;
@@ -598,6 +618,69 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     setScenes((prev) =>
       prev.map((s) => (s.id === activeId ? { ...s, name } : s))
     );
+
+  // ---------------------------------------------------------------- floor plan
+  const activeFloor =
+    floorPlan.floors.find((floor) => floor.id === activeFloorId) ??
+    floorPlan.floors[0];
+
+  const addFloor = () => {
+    const floor = makeFloor(`Floor ${floorPlan.floors.length + 1}`);
+    setFloorPlan((plan) => ({ ...plan, floors: [...plan.floors, floor] }));
+    setActiveFloorId(floor.id);
+  };
+
+  const removeFloor = (id: string) => {
+    if (floorPlan.floors.length <= 1) return;
+    const remaining = floorPlan.floors.filter((floor) => floor.id !== id);
+    setFloorPlan((plan) => ({ ...plan, floors: remaining }));
+    setScenes((list) => list.map((scene) => scene.floorId === id ? { ...scene, floorId: undefined } : scene));
+    setActiveFloorId(remaining[0]?.id ?? "");
+  };
+
+  const onFloorPlanChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !activeFloor) return;
+    const targetFloorId = activeFloor.id;
+    setBusy(true);
+    setStatus("Uploading floor plan…");
+    try {
+      const { url } = await uploadFloorPlan(file);
+      setFloorPlan((plan) => ({
+        ...plan,
+        floors: plan.floors.map((floor) => floor.id === targetFloorId ? { ...floor, imageUrl: url } : floor),
+      }));
+      setStatus("Floor plan uploaded — click it to place the current room");
+    } catch (err) {
+      setStatus((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const placeSceneOnFloorPlan = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!activeFloor?.imageUrl) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = +(((e.clientX - rect.left) / rect.width) * 100).toFixed(2);
+    const y = +(((e.clientY - rect.top) / rect.height) * 100).toFixed(2);
+    setFloorPlan((plan) => ({
+      ...plan,
+      floors: plan.floors.map((floor) => ({
+        ...floor,
+        points: floor.id === activeFloor.id
+          ? [...floor.points.filter((point) => point.sceneId !== activeScene.id), { id: uuid(), sceneId: activeScene.id, label: activeScene.name, x, y }]
+          : floor.points.filter((point) => point.sceneId !== activeScene.id),
+      })),
+    }));
+    setScenes((list) => list.map((scene) => scene.id === activeScene.id ? { ...scene, floorId: activeFloor.id } : scene));
+    setStatus(`${activeScene.name} placed on ${activeFloor.name}`);
+  };
+
+  const removeActiveScenePoint = () => {
+    setFloorPlan((plan) => ({ ...plan, floors: plan.floors.map((floor) => ({ ...floor, points: floor.points.filter((point) => point.sceneId !== activeScene.id) })) }));
+    setScenes((list) => list.map((scene) => scene.id === activeScene.id ? { ...scene, floorId: undefined } : scene));
+  };
 
   // ---------------------------------------------------------------- starting view
   // Store where the camera should face when this scene opens. Capturing the live
@@ -726,10 +809,11 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
       visibility,
       startSceneId: startSceneId || scenes[0].id,
       scenes,
+      floorPlan,
       createdAt: createdAt ?? now,
       updatedAt: now,
     };
-  }, [scenes, tourId, title, description, visibility, startSceneId, createdAt]);
+  }, [scenes, tourId, title, description, visibility, startSceneId, floorPlan, createdAt]);
 
   // ---------------------------------------------------------------- auto-save
   // The studio saves itself: any change to the tour schedules a debounced save,
@@ -739,8 +823,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
 
   // Signature of everything we persist; a change here means there's work to save.
   const sig = useMemo(
-    () => tourSig({ scenes, title, description, visibility, startSceneId }),
-    [scenes, title, description, visibility, startSceneId]
+    () => tourSig({ scenes, title, description, visibility, startSceneId, floorPlan }),
+    [scenes, title, description, visibility, startSceneId, floorPlan]
   );
 
   // Keep the latest builder in a ref so the debounced timer always saves fresh
@@ -873,9 +957,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           ref={mountRef}
           className={`${styles.stage} ${mode === "edit" ? styles.placing : ""}`}
         >
-          <div className={styles.logo} aria-label="360Vision">
-            360<span>Vision</span>
-          </div>
+          <img className={styles.logo} src="/brand/360vision-mark.svg" alt="360Vision" />
 
           <div className={styles.markers}>
             {hotspots.map((hs, i) => {
@@ -1057,6 +1139,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               </button>
             </div>
           </div>
+
+          <div className={styles.asideBody}>
 
           {/* ---- tour info ---- */}
           <div
@@ -1279,6 +1363,99 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ---- property floor plan ---- */}
+          <div
+            className={styles.ph}
+            onClick={() => toggleSection("floorPlan")}
+            role="button"
+          >
+            <span>
+              <span className={styles.chev} data-open={!collapsed.floorPlan} aria-hidden>▸</span>
+              Property map
+            </span>
+            <span className={styles.co}>{floorPlan.enabled ? "Visible" : "Hidden"}</span>
+          </div>
+          {!collapsed.floorPlan && (
+            <div className={styles.mapEditor} data-theme="luxury">
+              <label className={styles.enableRow}>
+                <span><b>Show map in public tour</b><small>Visitors can see their location and change floors.</small></span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-sm"
+                  checked={floorPlan.enabled}
+                  onChange={(e) => setFloorPlan((plan) => ({ ...plan, enabled: e.target.checked }))}
+                />
+              </label>
+
+              <div className={styles.floorToolbar}>
+                <div role="tablist" className="tabs tabs-box tabs-xs">
+                  {floorPlan.floors.map((floor) => (
+                    <button
+                      key={floor.id}
+                      role="tab"
+                      className={`tab ${floor.id === activeFloor?.id ? "tab-active" : ""}`}
+                      onClick={() => setActiveFloorId(floor.id)}
+                    >
+                      {floor.name}
+                    </button>
+                  ))}
+                </div>
+                <button className="btn btn-xs" onClick={addFloor}>+ Floor</button>
+              </div>
+
+              {activeFloor && (
+                <>
+                  <label>Floor name</label>
+                  <input
+                    value={activeFloor.name}
+                    onChange={(e) => setFloorPlan((plan) => ({
+                      ...plan,
+                      floors: plan.floors.map((floor) => floor.id === activeFloor.id ? { ...floor, name: e.target.value } : floor),
+                    }))}
+                  />
+                  <div className={styles.planActions}>
+                    <button className="btn btn-sm" onClick={() => planFileRef.current?.click()} disabled={busy}>
+                      {activeFloor.imageUrl ? "Replace plan" : "Upload plan"}
+                    </button>
+                    {floorPlan.floors.length > 1 && <button className="btn btn-ghost btn-sm" onClick={() => removeFloor(activeFloor.id)}>Remove floor</button>}
+                  </div>
+                  <p className={styles.note}>Upload an architectural plan, then click the room position to place <b>{activeScene.name}</b>. Click again to move it.</p>
+                  <div
+                    className={`${styles.planPreview} ${activeFloor.imageUrl ? styles.planPreviewReady : ""}`}
+                    onClick={placeSceneOnFloorPlan}
+                    role="button"
+                    aria-label={`Place ${activeScene.name} on ${activeFloor.name}`}
+                  >
+                    {activeFloor.imageUrl ? <img src={activeFloor.imageUrl} alt={`${activeFloor.name} plan`} /> : <span>Upload a plan image to start adding locations</span>}
+                    {activeFloor.points.map((point) => (
+                      <i
+                        key={point.id}
+                        className={point.sceneId === activeScene.id ? styles.planPointActive : styles.planPoint}
+                        style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                        title={point.label}
+                      />
+                    ))}
+                  </div>
+                  <label>Current scene floor</label>
+                  <select
+                    value={activeScene.floorId ?? ""}
+                    onChange={(e) => {
+                      const nextId = e.target.value || undefined;
+                      setScenes((list) => list.map((scene) => scene.id === activeScene.id ? { ...scene, floorId: nextId } : scene));
+                      if (nextId) setActiveFloorId(nextId);
+                    }}
+                  >
+                    <option value="">Not assigned</option>
+                    {floorPlan.floors.map((floor) => <option key={floor.id} value={floor.id}>{floor.name}</option>)}
+                  </select>
+                  {floorPlan.floors.some((floor) => floor.points.some((point) => point.sceneId === activeScene.id)) && (
+                    <button className="btn btn-ghost btn-sm btn-block" onClick={removeActiveScenePoint}>Remove this room’s map point</button>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -1665,6 +1842,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
             )}
             </>
           )}
+          </div>
         </aside>
       </main>
 
@@ -1681,6 +1859,13 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
         accept="image/*"
         hidden
         onChange={onIconChosen}
+      />
+      <input
+        ref={planFileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={onFloorPlanChosen}
       />
     </div>
   );
@@ -1753,6 +1938,7 @@ function tourSig(d: {
   description: string;
   visibility: Visibility;
   startSceneId: string;
+  floorPlan: FloorPlan;
 }): string {
   return JSON.stringify(d);
 }

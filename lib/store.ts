@@ -7,7 +7,7 @@
  */
 import type { Tour as TourRow } from "@prisma/client";
 import { prisma } from "./prisma";
-import type { Scene, Tour, Visibility } from "./types";
+import type { FloorPlan, Scene, Tour, Visibility } from "./types";
 
 type OwnerSel = { username: string | null; name: string | null } | null;
 type RowWithOwner = TourRow & { owner?: OwnerSel };
@@ -49,7 +49,7 @@ async function uniqueSlug(ownerId: string, title: string, excludeId?: string): P
 
 /** DB row → app Tour shape (merges the JSON `data` with the columns). */
 function rowToTour(row: RowWithOwner): Tour {
-  let data: { startSceneId?: string; scenes?: Scene[] } = {};
+  let data: { startSceneId?: string; scenes?: Scene[]; floorPlan?: FloorPlan } = {};
   try {
     data = JSON.parse(row.data || "{}") as { startSceneId?: string; scenes?: Scene[] };
   } catch {
@@ -63,6 +63,7 @@ function rowToTour(row: RowWithOwner): Tour {
     visibility: row.visibility as Visibility,
     startSceneId: data.startSceneId ?? scenes[0]?.id ?? "",
     scenes,
+    floorPlan: data.floorPlan,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     ownerId: row.ownerId,
@@ -79,6 +80,7 @@ function dataFor(input: Partial<Tour>): string {
   return JSON.stringify({
     startSceneId: input.startSceneId ?? input.scenes?.[0]?.id ?? "",
     scenes: input.scenes ?? [],
+    floorPlan: input.floorPlan,
   });
 }
 
@@ -202,7 +204,7 @@ export async function saveTour(id: string, input: Partial<Tour>): Promise<Tour |
 
   const visibility = (input.visibility ?? (existing.visibility as Visibility)) as Visibility;
   const title = input.title ?? existing.title;
-  let existingData: { startSceneId?: string; scenes?: Scene[] } = {};
+  let existingData: { startSceneId?: string; scenes?: Scene[]; floorPlan?: FloorPlan } = {};
   try {
     existingData = JSON.parse(existing.data || "{}") as { startSceneId?: string; scenes?: Scene[] };
   } catch {
@@ -225,7 +227,12 @@ export async function saveTour(id: string, input: Partial<Tour>): Promise<Tour |
       description: input.description ?? existing.description,
       visibility,
       coverUrl: input.coverUrl ?? coverFrom(scenes, startSceneId),
-      data: dataFor({ ...input, scenes, startSceneId }),
+      data: dataFor({
+        ...input,
+        scenes,
+        startSceneId,
+        floorPlan: input.floorPlan ?? existingData.floorPlan,
+      }),
       publishedAt,
     },
     include: { owner: ownerSelect },

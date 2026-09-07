@@ -76,6 +76,31 @@ export interface Scene {
   /** Initial field of view in degrees; ~75 is a sensible default. */
   initialFov: number;
   hotspots: Hotspot[];
+  /** Optional floor assignment used by the property floor-plan navigator. */
+  floorId?: string;
+}
+
+/** A clickable point on an uploaded floor plan. Coordinates are percentages. */
+export interface FloorPlanPoint {
+  id: string;
+  sceneId: string;
+  label: string;
+  x: number;
+  y: number;
+}
+
+/** One storey in a multi-floor property. */
+export interface FloorPlanFloor {
+  id: string;
+  name: string;
+  imageUrl?: string;
+  points: FloorPlanPoint[];
+}
+
+/** Optional navigation map shown over the public 360 viewer. */
+export interface FloorPlan {
+  enabled: boolean;
+  floors: FloorPlanFloor[];
 }
 
 /** The whole experience — one property, one showroom, one space. */
@@ -89,6 +114,8 @@ export interface Tour {
   /** Which scene loads first. */
   startSceneId: string;
   scenes: Scene[];
+  /** Optional, owner-authored floor plan navigation. */
+  floorPlan?: FloorPlan;
   /** ISO date strings. */
   createdAt: string;
   updatedAt: string;
