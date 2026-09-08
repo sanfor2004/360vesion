@@ -1,8 +1,16 @@
 # dependencies
 node_modules/
 
-# framework/build output
+# framework/build output and diagnostics
 .next/
+/temp/*
+!/temp/README.md
+!/temp/logs/
+!/temp/logs/.gitkeep
+!/temp/reports/
+!/temp/reports/.gitkeep
+!/temp/screenshots/
+!/temp/screenshots/.gitkeep
 out/
 build/
 dist/
@@ -22,15 +30,10 @@ next-env.d.ts
 !/public/uploads/.gitkeep
 /data/tours/*
 !/data/tours/.gitkeep
-/prisma/*.db
-/prisma/*.db-journal
-/prisma/*.db-wal
-/prisma/*.db-shm
 
-# env
+# optional local environment overrides
 .env
 .env.*
-!.env.example
 
 # misc
 .DS_Store

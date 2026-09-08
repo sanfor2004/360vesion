@@ -46,7 +46,7 @@ Use once near the start of a page for a title, optional context, and optional ac
 
 ```tsx
 <PageHeader
-  eyebrow="LOCAL SQLITE WORKSPACE"
+  eyebrow="LOCAL PROJECT LIBRARY"
   title="My work"
   description="12 local tours"
   actions={<ActionLink href="/studio/new" tone="primary">New tour</ActionLink>}

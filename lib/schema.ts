@@ -1,6 +1,6 @@
 /**
  * Zod schemas mirroring the interfaces in `types.ts`. Used to validate tour
- * JSON arriving at POST/PUT so the (semi-public) CRUD endpoints can't be fed
+ * JSON arriving at POST/PUT so local CRUD endpoints cannot persist
  * malformed data. Keep these in step with types.ts.
  */
 import { z } from "zod";
@@ -14,7 +14,6 @@ export const hotspotTypeSchema = z.enum([
   "media",
   "text",
 ]);
-export const visibilitySchema = z.enum(["draft", "public", "unlisted"]);
 
 export const imageAssetSchema = z.object({
   url: z.string().min(1),
@@ -75,7 +74,6 @@ export const tourSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   description: z.string().default(""),
-  visibility: visibilitySchema.default("draft"),
   startSceneId: z.string(),
   scenes: z.array(sceneSchema),
   floorPlan: floorPlanSchema.optional(),
@@ -83,17 +81,12 @@ export const tourSchema = z.object({
   updatedAt: z.string(),
 });
 
-/**
- * Body accepted by PUT /api/tours/:id and POST /api/tours. Timestamps and
- * community metadata (id/owner/slug/cover) are assigned by the server and ignored
- * if sent by the client.
- */
+/** Body accepted by the local create and update endpoints. */
 export const tourInputSchema = tourSchema
   .omit({ createdAt: true, updatedAt: true })
   .extend({
     id: z.string().min(1).optional(),
     description: z.string().optional(),
-    visibility: visibilitySchema.optional(),
     // Optional so a fresh tour can be created from just a title; the store fills
     // sensible defaults (empty scene list, first scene as start).
     startSceneId: z.string().optional(),

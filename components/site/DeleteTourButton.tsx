@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { deleteTour } from "@/lib/api-client";
+import { ActionButton } from "@/components/ui";
 
 export default function DeleteTourButton({ id, title }: { id: string; title: string }) {
   const router = useRouter();
@@ -21,8 +22,8 @@ export default function DeleteTourButton({ id, title }: { id: string; title: str
   };
 
   return (
-    <button style={{ color: "#f87171" }} onClick={remove} disabled={busy}>
+    <ActionButton tone="error" size="xs" onClick={remove} disabled={busy}>
       {busy ? "Deleting…" : "Delete"}
-    </button>
+    </ActionButton>
   );
 }

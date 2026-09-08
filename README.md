@@ -1,153 +1,52 @@
 # 360Vision
 
-360Vision is a local Next.js studio for creating and viewing interactive 360 panorama tours. It opens directly with no account or credentials and stores projects in a local SQLite database.
+360Vision is a single-owner local studio for authoring and viewing interactive
+real-estate tours. It has no accounts, publication states, public gallery, or
+cloud dependency. Each project is a portable JSON file in `data/tours/`.
 
-The app has two main surfaces:
+## Main workflow
 
-- Studio: a Three.js authoring experience for placing and editing hotspots by yaw and pitch.
-- Viewer: a Photo Sphere Viewer runtime for public tour playback, scene navigation, gyroscope mode, stereo mode, and fullscreen viewing.
+1. Open `/dashboard` and create a tour.
+2. Add 2:1 equirectangular panoramas in `/studio/[tourId]`.
+3. Add angular yaw/pitch hotspots and an optional multi-floor plan.
+4. Wait for autosave, then preview the project at `/tour/[tourId]`.
+5. Use Save as or Download JSON for a separate copy or backup.
 
-Hotspots are stored as angular coordinates instead of pixels, so tours keep working across image re-encoding and responsive image variants.
+## Stack
 
-## Features
-
-- Direct local access with no login, signup, passwords, or sessions.
-- A “My work” dashboard backed by SQLite, plus a gallery for published tours.
-- Draft, public, and unlisted tour visibility.
-- Multi-scene tours with start scene, per-scene camera framing, and cover image selection.
-- Hotspot types for information, links, scene transitions, and media panels.
-- Panorama upload validation for 2:1 equirectangular images.
-- Server-side image processing with Sharp for full, mobile, and thumbnail variants.
-- Multi-floor architectural maps with click-to-place room navigation.
-- Prisma-backed SQLite persistence for local tour JSON.
-
-## Tech Stack
-
-- Next.js 16 App Router
-- React 19
-- TypeScript
-- Prisma with SQLite
-- Three.js
-- Photo Sphere Viewer
-- Sharp
-- Zod
-
-## Prerequisites
-
-- Node.js 22 or newer
-- npm
-- SQLite, through Prisma
+- Next.js 16, React 19, and strict TypeScript
+- Three.js for authoring
+- Photo Sphere Viewer for playback
+- Sharp for image processing
+- Zod for runtime validation
+- Atomic local JSON storage and local uploaded assets
 
 ## Setup
 
-Install dependencies:
+Requires Node.js 22 or newer.
 
-```bash
+```text
 npm install
-```
-
-Create a local environment file:
-
-```bash
-cp .env.example .env
-```
-
-Generate the Prisma client and sync the local database schema:
-
-```bash
-npm run db:generate
-npm run db:push
-```
-
-Start the development server:
-
-```bash
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000/dashboard`. No environment file is required.
 
-## Configuration
+## Commands
 
-All runtime configuration is documented in `.env.example`.
+- `npm run dev` — run the local development server.
+- `npm run lint` — run strict TypeScript validation.
+- `npm run build` — create the production build.
+- `npm start` — serve the production build locally.
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `DATABASE_URL` | Yes | SQLite connection string used by Prisma. Defaults to `file:./dev.db` in `.env.example`. |
-| `NEXT_PUBLIC_SITE_URL` | Production | Canonical public URL used for metadata, sitemap, robots.txt, and server-generated share URLs. |
+Generated builds, traces, logs, caches, validation reports, and temporary
+screenshots belong under `temp/`. Tour data and uploads remain under
+`data/tours/` and `public/uploads/` because they are user-owned runtime data.
 
-Local uploads are written to `public/uploads` and are ignored by git except for the `.gitkeep` placeholder. For production, use a persistent filesystem or replace `lib/storage.ts` with an object storage implementation that returns public image URLs.
+## Backup
 
-## Scripts
+Back up both `data/tours/` and `public/uploads/`. A tour JSON file references
+its images by URL, so both locations are required for a complete restore.
 
-| Script | Description |
-| --- | --- |
-| `npm run dev` | Start the local Next.js development server. |
-| `npm run build` | Build the production app. |
-| `npm start` | Run the production build. |
-| `npm run lint` | Run the configured lint command. |
-| `npm run db:generate` | Generate the Prisma client. |
-| `npm run db:push` | Push the Prisma schema to the configured database. |
-| `npm run db:studio` | Open Prisma Studio. |
-
-## Project Structure
-
-```text
-app/                 Next.js routes, pages, metadata, and API handlers
-components/site/     Local navigation, gallery, profile, and dashboard UI
-components/ui/       Reusable actions, headers, empty states, and status notices
-components/studio/   Three.js tour authoring studio
-components/viewer/   Public panorama tour viewer
-lib/                 Local identity, storage, persistence, validation, and shared helpers
-prisma/              Prisma schema
-public/              Static assets and upload placeholders
-scripts/             Utility scripts
-data/tours/          Legacy/local data placeholder retained for compatibility
-```
-
-## Shared UI Components
-
-The site uses Inter as its global interface font. Reusable page and feedback components live in `components/ui`; their props, examples, and contribution guidance are documented in [docs/ui-components.md](docs/ui-components.md).
-
-## Remaining Work
-
-The core local tour workflow is in place. The priority next steps are complete import/export and backup support, safer destructive actions and tour validation, scene organization, accessibility/responsive validation, and persistent infrastructure before any public deployment. See [docs/project-status.md](docs/project-status.md) for the current roadmap.
-
-## Development Workflow
-
-1. Open the My work dashboard and create a tour.
-2. Upload a 2:1 panorama image.
-3. Add scenes, hotspots, floors, and map points in the studio.
-4. Changes save automatically to SQLite.
-5. View any local tour directly, including drafts.
-
-The repository includes `public/panoramas/test-grid.jpg` for local testing. Regenerate it with:
-
-```bash
-node scripts/make-test-panorama.mjs
-```
-
-## Deployment
-
-This repository is deployment-neutral. It does not include provider metadata or assume a particular hosting platform.
-
-For a production deployment, provide:
-
-- A Node.js host that can run Next.js with the Node runtime.
-- A writable SQLite database path reachable through `DATABASE_URL`, or a deliberate Prisma schema change to another database provider.
-- A configured `NEXT_PUBLIC_SITE_URL`.
-- Persistent storage for uploaded images.
-
-The default local storage implementation writes files into `public/uploads`. That is fine for local development and single-machine experiments, but it is not enough for hosts with ephemeral filesystems, multiple app instances, or read-only deployment directories.
-
-## Security
-
-Do not commit `.env`, `.env.*`, local uploads, generated build output, or provider-specific deployment metadata. Report vulnerabilities using the process in `SECURITY.md`.
-
-## Contributing
-
-Contributions are welcome. Please read `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and the issue and pull request templates before opening a change.
-
-## License
-
-This project is released under the MIT License. See `LICENSE` for details.
+The filesystem implementation is intentionally for one local machine. Do not
+expose its unauthenticated write APIs on a public network.

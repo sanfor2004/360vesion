@@ -7,8 +7,7 @@ Thank you for considering a contribution to 360Vision.
 1. Fork the repository and clone your fork.
 2. Install dependencies with `npm install`.
 3. Copy `.env.example` to `.env` and fill in local values.
-4. Run `npm run db:generate` and `npm run db:push` to create your local SQLite database.
-5. Start the app with `npm run dev`.
+4. Start the app with `npm run dev`; the local JSON project directory is created automatically.
 
 ## Development Guidelines
 

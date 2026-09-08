@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import { v4 as uuid } from "uuid";
 import {
@@ -11,9 +12,8 @@ import {
   type ImageAsset,
   type Scene,
   type Tour,
-  type Visibility,
 } from "@/lib/types";
-import { fetchTour, saveTour, uploadFloorPlan, uploadIcon, uploadImage } from "@/lib/api-client";
+import { createTour, fetchTour, saveTour, uploadFloorPlan, uploadIcon, uploadImage } from "@/lib/api-client";
 import {
   DEFAULT_PIN_COLOR,
   DEFAULT_TEXT_SIZE,
@@ -26,6 +26,7 @@ import {
   pinDataUri,
 } from "@/components/viewer/hotspot-handlers";
 import { dirToWorld, lookTarget, ndcFromEvent, worldToDir } from "./raycast";
+import { ActionButton } from "@/components/ui";
 import styles from "./SphereStudio.module.css";
 
 const R = 500; // sphere radius
@@ -63,6 +64,7 @@ export interface SphereStudioProps {
 }
 
 export default function SphereStudio({ tourId }: SphereStudioProps) {
+  const router = useRouter();
   const firstScene = useMemo(() => makeScene("Scene 1"), []);
 
   // ---- tour-level state ----
@@ -71,7 +73,6 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const [startSceneId, setStartSceneId] = useState(firstScene.id);
   const [title, setTitle] = useState("Untitled tour");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("draft");
   const [floorPlan, setFloorPlan] = useState<FloorPlan>(() => ({
     enabled: false,
     floors: [makeFloor()],
@@ -86,9 +87,14 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
+  const [webglError, setWebglError] = useState<string | null>(null);
+  const [rendererAttempt, setRendererAttempt] = useState(0);
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [saveAsTitle, setSaveAsTitle] = useState("");
+  const [saveAsBusy, setSaveAsBusy] = useState(false);
 
   // ---- collapsible right-panel sections ----
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
@@ -283,9 +289,36 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     const mount = mountRef.current;
     if (!mount) return;
 
+    setWebglError(null);
+    const canvas = document.createElement("canvas");
+    let context: WebGL2RenderingContext | null = null;
+    try {
+      context = canvas.getContext("webgl2", {
+        antialias: true,
+        alpha: false,
+        powerPreference: "default",
+      });
+    } catch {
+      context = null;
+    }
+    if (!context) {
+      setWebglError(
+        "Your browser could not start WebGL. Your project is safe and still editable; enable hardware acceleration or update the graphics driver, then try again."
+      );
+      return;
+    }
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, 1, 0.1, 1100);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true });
+    } catch {
+      setWebglError(
+        "The panorama renderer could not start. Your project is safe and still editable; enable hardware acceleration or update the graphics driver, then try again."
+      );
+      return;
+    }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     mount.insertBefore(renderer.domElement, mount.firstChild);
 
@@ -457,8 +490,15 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
     mount.addEventListener("pointercancel", onCancel);
     mount.addEventListener("wheel", onWheel, { passive: false });
 
-    const fwd = new THREE.Vector3();
     let raf = 0;
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+      cancelAnimationFrame(raf);
+      setWebglError("The panorama renderer stopped unexpectedly. Your saved project is safe; try starting the preview again.");
+    };
+    renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+
+    const fwd = new THREE.Vector3();
     const animate = () => {
       raf = requestAnimationFrame(animate);
       ctx.lat = Math.max(-85, Math.min(85, ctx.lat));
@@ -495,6 +535,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
       mount.removeEventListener("pointerup", onUp);
       mount.removeEventListener("pointercancel", onCancel);
       mount.removeEventListener("wheel", onWheel);
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       renderer.domElement.remove();
       material.map?.dispose();
       material.dispose();
@@ -502,8 +543,9 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
       renderer.dispose();
       three.current = null;
     };
+    // rendererAttempt intentionally recreates the complete WebGL lifecycle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rendererAttempt]);
 
   // ---------------------------------------------------------------- load tour
   useEffect(() => {
@@ -520,11 +562,9 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           return;
         }
         const description = tour.description ?? "";
-        const visibility = tour.visibility ?? "draft";
         const startSceneId = tour.startSceneId || tour.scenes[0].id;
         setTitle(tour.title);
         setDescription(description);
-        setVisibility(visibility);
         const loadedFloorPlan = tour.floorPlan ?? { enabled: false, floors: [makeFloor()] };
         setFloorPlan(loadedFloorPlan);
         setActiveFloorId(
@@ -547,7 +587,6 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           scenes: tour.scenes,
           title: tour.title,
           description,
-          visibility,
           startSceneId,
           floorPlan: loadedFloorPlan,
         });
@@ -806,14 +845,13 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
       id: tourId,
       title,
       description,
-      visibility,
       startSceneId: startSceneId || scenes[0].id,
       scenes,
       floorPlan,
       createdAt: createdAt ?? now,
       updatedAt: now,
     };
-  }, [scenes, tourId, title, description, visibility, startSceneId, floorPlan, createdAt]);
+  }, [scenes, tourId, title, description, startSceneId, floorPlan, createdAt]);
 
   // ---------------------------------------------------------------- auto-save
   // The studio saves itself: any change to the tour schedules a debounced save,
@@ -823,8 +861,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
 
   // Signature of everything we persist; a change here means there's work to save.
   const sig = useMemo(
-    () => tourSig({ scenes, title, description, visibility, startSceneId, floorPlan }),
-    [scenes, title, description, visibility, startSceneId, floorPlan]
+    () => tourSig({ scenes, title, description, startSceneId, floorPlan }),
+    [scenes, title, description, startSceneId, floorPlan]
   );
 
   // Keep the latest builder in a ref so the debounced timer always saves fresh
@@ -862,6 +900,25 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
       JSON.stringify(buildTour(), null, 2),
       "application/json"
     );
+  };
+
+  const openSaveAs = () => {
+    setSaveAsTitle(`${title || "Untitled tour"} copy`);
+    setSaveAsOpen(true);
+  };
+
+  const onSaveAs = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const nextTitle = saveAsTitle.trim();
+    if (!nextTitle) return;
+    setSaveAsBusy(true);
+    try {
+      const copy = await createTour({ ...buildTour(), id: undefined, title: nextTitle });
+      router.push(`/studio/${copy.id}`);
+    } catch (error) {
+      setStatus((error as Error).message);
+      setSaveAsBusy(false);
+    }
   };
 
   // ---------------------------------------------------------------- mode + selection
@@ -957,7 +1014,20 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           ref={mountRef}
           className={`${styles.stage} ${mode === "edit" ? styles.placing : ""}`}
         >
-          <img className={styles.logo} src="/brand/360vision-mark.svg" alt="360Vision" />
+          <div className={styles.logo} aria-label="360Vision">
+            <span>360</span>Vision
+          </div>
+
+          {webglError && (
+            <div className={styles.webglFallback} role="alert">
+              <span className={styles.webglBadge}>PREVIEW PAUSED</span>
+              <h2>Panorama preview unavailable</h2>
+              <p>{webglError}</p>
+              <ActionButton tone="primary" onClick={() => setRendererAttempt((attempt) => attempt + 1)}>
+                Try preview again
+              </ActionButton>
+            </div>
+          )}
 
           <div className={styles.markers}>
             {hotspots.map((hs, i) => {
@@ -1134,9 +1204,12 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 {saveState === "error" && <>Save failed</>}
                 {saveState === "idle" && <>Auto-save on</>}
               </div>
-              <button className={styles.btn} onClick={onExport}>
-                Export
-              </button>
+              <ActionButton size="sm" onClick={openSaveAs}>
+                Save as
+              </ActionButton>
+              <ActionButton size="sm" tone="outline" onClick={onExport}>
+                Download JSON
+              </ActionButton>
             </div>
           </div>
 
@@ -1169,15 +1242,6 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 placeholder="What is this tour about?"
                 onChange={(e) => setDescription(e.target.value)}
               />
-              <label>Visibility</label>
-              <select
-                value={visibility}
-                onChange={(e) => setVisibility(e.target.value as Visibility)}
-              >
-                <option value="draft">Draft — only you</option>
-                <option value="public">Public — shown in Explore</option>
-                <option value="unlisted">Unlisted — anyone with the link</option>
-              </select>
               {status && <div className={styles.status}>{status}</div>}
             </div>
           )}
@@ -1198,7 +1262,8 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               </span>
               Scenes
             </span>
-            <button
+            <ActionButton
+              size="xs"
               className={styles.addScene}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1206,7 +1271,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               }}
             >
               + Add
-            </button>
+            </ActionButton>
           </div>
           {!collapsed.scenes && (
           <div className={styles.sceneList}>
@@ -1284,19 +1349,20 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 />
               ) : null}
               <div className={styles.imageBtns}>
-                <button
-                  className={styles.btn}
+                <ActionButton
+                  size="sm"
                   onClick={onPickImage}
                   disabled={busy}
                 >
                   Upload image
-                </button>
-                <button
-                  className={`${styles.btn} ${styles.ghost}`}
+                </ActionButton>
+                <ActionButton
+                  size="sm"
+                  tone="outline"
                   onClick={onTestGrid}
                 >
                   Test grid
-                </button>
+                </ActionButton>
               </div>
 
               <label>Starting view</label>
@@ -1304,15 +1370,16 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 Where the camera faces when this scene opens.
               </p>
               <div className={styles.imageBtns}>
-                <button className={styles.btn} onClick={setStartFromCurrent}>
+                <ActionButton size="sm" onClick={setStartFromCurrent}>
                   Use current view
-                </button>
-                <button
-                  className={`${styles.btn} ${styles.ghost}`}
+                </ActionButton>
+                <ActionButton
+                  size="sm"
+                  tone="outline"
                   onClick={previewStartView}
                 >
                   Preview
-                </button>
+                </ActionButton>
               </div>
               <div className={styles.coords}>
                 <div>
@@ -1381,7 +1448,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           {!collapsed.floorPlan && (
             <div className={styles.mapEditor} data-theme="luxury">
               <label className={styles.enableRow}>
-                <span><b>Show map in public tour</b><small>Visitors can see their location and change floors.</small></span>
+                <span><b>Show map in tour</b><small>Viewers can see their location and change floors.</small></span>
                 <input
                   type="checkbox"
                   className="toggle toggle-sm"
@@ -1391,19 +1458,22 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
               </label>
 
               <div className={styles.floorToolbar}>
-                <div role="tablist" className="tabs tabs-box tabs-xs">
+                <div role="tablist" className={styles.floorTabs}>
                   {floorPlan.floors.map((floor) => (
-                    <button
+                    <ActionButton
                       key={floor.id}
                       role="tab"
-                      className={`tab ${floor.id === activeFloor?.id ? "tab-active" : ""}`}
+                      className={styles.floorTab}
+                      size="xs"
+                      tone={floor.id === activeFloor?.id ? "primary" : "ghost"}
+                      aria-selected={floor.id === activeFloor?.id}
                       onClick={() => setActiveFloorId(floor.id)}
                     >
                       {floor.name}
-                    </button>
+                    </ActionButton>
                   ))}
                 </div>
-                <button className="btn btn-xs" onClick={addFloor}>+ Floor</button>
+                <ActionButton size="xs" onClick={addFloor}>+ Floor</ActionButton>
               </div>
 
               {activeFloor && (
@@ -1417,10 +1487,10 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                     }))}
                   />
                   <div className={styles.planActions}>
-                    <button className="btn btn-sm" onClick={() => planFileRef.current?.click()} disabled={busy}>
+                    <ActionButton size="sm" onClick={() => planFileRef.current?.click()} disabled={busy}>
                       {activeFloor.imageUrl ? "Replace plan" : "Upload plan"}
-                    </button>
-                    {floorPlan.floors.length > 1 && <button className="btn btn-ghost btn-sm" onClick={() => removeFloor(activeFloor.id)}>Remove floor</button>}
+                    </ActionButton>
+                    {floorPlan.floors.length > 1 && <ActionButton size="sm" tone="ghost" onClick={() => removeFloor(activeFloor.id)}>Remove floor</ActionButton>}
                   </div>
                   <p className={styles.note}>Upload an architectural plan, then click the room position to place <b>{activeScene.name}</b>. Click again to move it.</p>
                   <div
@@ -1452,7 +1522,7 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                     {floorPlan.floors.map((floor) => <option key={floor.id} value={floor.id}>{floor.name}</option>)}
                   </select>
                   {floorPlan.floors.some((floor) => floor.points.some((point) => point.sceneId === activeScene.id)) && (
-                    <button className="btn btn-ghost btn-sm btn-block" onClick={removeActiveScenePoint}>Remove this room’s map point</button>
+                    <ActionButton className={styles.fullAction} size="sm" tone="ghost" onClick={removeActiveScenePoint}>Remove this room’s map point</ActionButton>
                   )}
                 </>
               )}
@@ -1702,13 +1772,14 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                   </>
                 );
               })()}
-              <button
-                className={`${styles.btn} ${styles.iconUpload}`}
+              <ActionButton
+                className={styles.iconUpload}
+                size="sm"
                 onClick={onPickIcon}
                 disabled={busy}
               >
                 Upload custom image…
-              </button>
+              </ActionButton>
 
               {selected.icon && !isBuiltinIcon(selected.icon) && (
                 <>
@@ -1835,9 +1906,9 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
                 </div>
               </div>
 
-              <button className={styles.del} onClick={deleteSelected}>
+              <ActionButton className={styles.fullAction} tone="error" size="sm" onClick={deleteSelected}>
                 Delete hotspot
-              </button>
+              </ActionButton>
             </div>
             )}
             </>
@@ -1845,6 +1916,22 @@ export default function SphereStudio({ tourId }: SphereStudioProps) {
           </div>
         </aside>
       </main>
+
+      {saveAsOpen && (
+        <div className={styles.dialogBackdrop} role="presentation" onMouseDown={() => !saveAsBusy && setSaveAsOpen(false)}>
+          <form className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="save-as-title" onSubmit={onSaveAs} onMouseDown={(event) => event.stopPropagation()}>
+            <span className={styles.dialogEyebrow}>NEW LOCAL PROJECT</span>
+            <h2 id="save-as-title">Save a copy</h2>
+            <p>Your current tour, scenes, hotspots, and floor plan will be copied into a separate project.</p>
+            <label htmlFor="save-as-name">Project name</label>
+            <input id="save-as-name" autoFocus value={saveAsTitle} onChange={(event) => setSaveAsTitle(event.target.value)} />
+            <div className={styles.dialogActions}>
+              <ActionButton tone="outline" disabled={saveAsBusy} onClick={() => setSaveAsOpen(false)}>Cancel</ActionButton>
+              <ActionButton tone="primary" type="submit" disabled={saveAsBusy || !saveAsTitle.trim()}>{saveAsBusy ? "Saving copy…" : "Save copy"}</ActionButton>
+            </div>
+          </form>
+        </div>
+      )}
 
       <input
         ref={fileImgRef}
@@ -1936,7 +2023,6 @@ function tourSig(d: {
   scenes: Scene[];
   title: string;
   description: string;
-  visibility: Visibility;
   startSceneId: string;
   floorPlan: FloorPlan;
 }): string {

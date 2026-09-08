@@ -8,6 +8,7 @@ import { StereoPlugin } from "@photo-sphere-viewer/stereo-plugin";
 import "@photo-sphere-viewer/markers-plugin/index.css";
 import { DEFAULT_FOV, type FloorPlanFloor, type Hotspot, type Scene, type Tour } from "@/lib/types";
 import { actionForHotspot, isImageUrl, markerForHotspot } from "./hotspot-handlers";
+import { ActionButton } from "@/components/ui";
 import styles from "./TourViewer.module.css";
 
 export interface TourViewerInnerProps { tour: Tour }
@@ -127,14 +128,14 @@ export default function TourViewerInner({ tour }: TourViewerInnerProps) {
       <ReactPhotoSphereViewer src={pickUrl(startScene)} defaultYaw={`${startScene.initialYaw}deg`} defaultPitch={`${startScene.initialPitch}deg`} defaultZoomLvl={fovToZoom(startScene.initialFov || DEFAULT_FOV)} navbar={false} plugins={plugins} onReady={onReady} height="100vh" width="100%" />
 
       <div className={styles.topBar}>
-        <img className={styles.brandMark} src="/brand/360vision-mark.svg" alt="360Vision" />
+        <div className={styles.brandText} aria-label="360Vision"><span>360</span>Vision</div>
         <div className={styles.tourTitle}><small>INTERACTIVE PROPERTY TOUR</small><strong>{tour.title}</strong></div>
         <div className={styles.topActions}>
-          {mapAvailable && <button className="btn btn-sm" onClick={() => setMapOpen((open) => !open)} aria-pressed={mapOpen}>{mapOpen ? "Hide map" : "Show map"}</button>}
-          {tour.scenes.length > 1 && <button className="btn btn-sm btn-square" onClick={() => navigate(sceneBefore.id)} aria-label={`Previous room: ${sceneBefore.name}`} title="Previous room">←</button>}
-          {tour.scenes.length > 1 && <button className={`btn btn-sm ${autoTour ? "btn-primary" : ""}`} onClick={() => setAutoTour((playing) => !playing)} aria-pressed={autoTour}>{autoTour ? "Stop tour" : "Auto tour"}</button>}
-          {tour.scenes.length > 1 && <button className="btn btn-sm btn-square" onClick={() => navigate(sceneAfter.id)} aria-label={`Next room: ${sceneAfter.name}`} title="Next room">→</button>}
-          <button className="btn btn-sm btn-square" onClick={() => document.documentElement.requestFullscreen?.()} aria-label="Enter fullscreen"><ExpandIcon /></button>
+          {mapAvailable && <ActionButton className={styles.viewerAction} size="sm" onClick={() => setMapOpen((open) => !open)} aria-pressed={mapOpen}>{mapOpen ? "Hide map" : "Show map"}</ActionButton>}
+          {tour.scenes.length > 1 && <ActionButton className={`${styles.viewerAction} ${styles.iconAction}`} size="sm" onClick={() => navigate(sceneBefore.id)} aria-label={`Previous room: ${sceneBefore.name}`} title="Previous room">←</ActionButton>}
+          {tour.scenes.length > 1 && <ActionButton className={styles.viewerAction} size="sm" tone={autoTour ? "primary" : "default"} onClick={() => setAutoTour((playing) => !playing)} aria-pressed={autoTour}>{autoTour ? "Stop tour" : "Auto tour"}</ActionButton>}
+          {tour.scenes.length > 1 && <ActionButton className={`${styles.viewerAction} ${styles.iconAction}`} size="sm" onClick={() => navigate(sceneAfter.id)} aria-label={`Next room: ${sceneAfter.name}`} title="Next room">→</ActionButton>}
+          <ActionButton className={`${styles.viewerAction} ${styles.iconAction}`} size="sm" onClick={() => document.documentElement.requestFullscreen?.()} aria-label="Enter fullscreen"><ExpandIcon /></ActionButton>
         </div>
       </div>
 
@@ -145,7 +146,7 @@ export default function TourViewerInner({ tour }: TourViewerInnerProps) {
         <section className={`${styles.mapCard} card card-sm`} aria-label="Property floor plan">
           <div className={styles.mapHeader}>
             <div><small>PROPERTY MAP</small><strong>{floor.name}</strong></div>
-            {floors.length > 1 && <div role="tablist" className="tabs tabs-box tabs-xs">{floors.map((item) => <button key={item.id} role="tab" className={`tab ${item.id === floor.id ? "tab-active" : ""}`} onClick={() => setFloorId(item.id)}>{item.name}</button>)}</div>}
+            {floors.length > 1 && <div role="tablist" className={styles.floorTabs}>{floors.map((item) => <ActionButton key={item.id} role="tab" className={styles.floorTab} size="xs" tone={item.id === floor.id ? "primary" : "ghost"} aria-selected={item.id === floor.id} onClick={() => setFloorId(item.id)}>{item.name}</ActionButton>)}</div>}
           </div>
           <div className={styles.mapCanvas}>
             {floor.imageUrl ? <img src={floor.imageUrl} alt={`${floor.name} floor plan`} /> : <EmptyPlan />}
@@ -168,7 +169,7 @@ export default function TourViewerInner({ tour }: TourViewerInnerProps) {
       </nav>
 
       {panel && <div className={`${styles.panel} card card-sm`} role="dialog" aria-label={panel.label}>
-        <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setPanel(null)} aria-label="Close">×</button>
+        <ActionButton className={styles.panelClose} tone="ghost" size="xs" onClick={() => setPanel(null)} aria-label="Close">×</ActionButton>
         <h3 className="card-title">{panel.label || "Untitled"}</h3>
         {panel.type === "media" && panel.url && isImageUrl(panel.url) && <img className={styles.media} src={panel.url} alt={panel.label} />}
         {panel.content && <p>{panel.content}</p>}

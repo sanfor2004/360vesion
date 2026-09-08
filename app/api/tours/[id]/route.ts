@@ -1,5 +1,5 @@
 /**
- * Local CRUD for one SQLite workspace. There is intentionally no account gate.
+ * Local CRUD for one JSON-file workspace. There is intentionally no account gate.
  */
 import { deleteTour, getTour, saveTour } from "@/lib/store";
 import { tourInputSchema } from "@/lib/schema";

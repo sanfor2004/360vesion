@@ -1,101 +1,36 @@
 # Validation Plan
 
-## Automated checks
-
-Run from the project root:
+## Required checks
 
 ```text
 npm run lint
 npm run build
 ```
 
-When the Prisma schema changes:
+The build route list must contain the dashboard, Studio, Viewer, demo, and local
+APIs. It must not contain login, profile, Explore, embed, sitemap, or publication
+routes.
 
-```text
-npm run db:generate
-npm run db:push
-```
+## Local workflow
 
-Expected results:
+- `/` redirects to `/dashboard` without credentials.
+- Create, rename, edit, copy, delete, and reopen a project.
+- Confirm autosave persists title, description, scenes, hotspots, and floor plans.
+- Confirm older JSON with legacy fields loads and a subsequent save removes them.
+- Upload valid panoramas, icons, and floor plans; reject invalid panoramas clearly.
+- Download readable JSON.
 
-- TypeScript exits without errors.
-- The production build completes.
-- Prisma validates and synchronizes the SQLite schema.
-- Removed authentication routes do not appear in the build route list.
+## Studio and Viewer
 
-## Local access checks
+- Exercise scene and hotspot authoring, start framing, map floors, and map points.
+- Verify hotspot, room-strip, map, previous/next, and Auto tour navigation.
+- Verify active room and floor remain synchronized.
+- Check 390×844, 768×1024, 1366×768, and 1920×1080.
+- Confirm Studio has one inspector scrollbar and a fixed two-row toolbar.
+- Confirm WebGL failure leaves project controls usable.
 
-- `/dashboard` returns successfully without a session cookie.
-- `/studio/[tourId]` opens directly.
-- `/tour/[tourId]` displays local drafts.
-- `/login` and `/signup` remain absent.
-- Panorama, icon, and floor-plan uploads work without credentials.
-- Creating a tour assigns it to the automatic local owner.
+## Persistence
 
-## Studio functional checks
-
-- Create a tour from My work and confirm immediate studio navigation.
-- Edit title, description, and visibility; wait for the Saved state; reload.
-- Upload a valid 2:1 panorama and verify full, mobile, and thumbnail variants.
-- Reject a non-2:1 panorama with an understandable error.
-- Add, rename, switch, and remove scenes.
-- Set and preview the starting view.
-- Add each hotspot type and verify its editor fields.
-- Navigate a scene hotspot in View mode.
-- Enable the property map and upload a non-2:1 plan image.
-- Add two floors, rename them, and switch between them.
-- Assign different scenes to different floors.
-- Click a plan to place a scene, click again to move it, and remove its point.
-- Reload and confirm floor images, assignments, and points persist.
-- Expand several Studio inspector sections together and confirm the right panel has one usable scrollbar, the Edit/View toolbar remains visible, and hotspot/map editors do not create nested scrollbars.
-
-## Viewer functional checks
-
-- Start scene and initial view load correctly.
-- Panorama drag, zoom, fullscreen, gyroscope, and stereo controls behave where supported.
-- Scene hotspots, map points, and thumbnails all navigate correctly.
-- Current room label and map marker update after each navigation method.
-- Selecting a scene on another floor switches the active floor.
-- Hide/show map works without affecting the room strip.
-- Tours with the map disabled remain fully navigable.
-- Tours with no floor-plan image show a sensible fallback.
-- Information and media panels open and close correctly.
-- Previous and next room controls select the expected scene.
-- Start Auto tour, confirm its playing state is obvious, wait for a scene change, and stop it. Confirm the stop control works immediately.
-
-## Visual checks
-
-Inspect at minimum:
-
-- Mobile portrait: 390 × 844.
-- Tablet portrait: 768 × 1024.
-- Laptop: 1366 × 768.
-- Desktop: 1920 × 1080.
-
-Verify:
-
-- The map stays on the left and does not cover essential controls.
-- The room strip is separate from the map and remains compact.
-- Floor tabs and room names do not overflow.
-- Current-location markers remain visible over light and dark plans.
-- Focus indicators, contrast, and minimum control sizes are usable.
-- No unintended page scrolling occurs in full-screen studio/viewer routes.
-- Auto-tour controls remain readable and usable over bright and dark panoramas.
-
-## Persistence and recovery checks
-
-- Restart the development server and confirm tours remain in SQLite.
-- Verify uploaded images still resolve after restart.
-- Copy `prisma/dev.db` and `public/uploads` as a backup; restore into a clean checkout and verify content.
-- Export a tour JSON and confirm it contains scenes, hotspots, and floor-plan data.
-
-## Release evidence
-
-Record for each delivery:
-
-- Commit or build identifier.
-- Automated-check output.
-- Browser/viewports tested.
-- Tour used for functional testing.
-- Screenshots of My work, Studio, desktop Viewer, and mobile Viewer.
-- Known limitations and deferred issues.
+- Restart and reopen projects.
+- Back up and restore `data/tours/` with `public/uploads/`.
+- Keep generated diagnostics under `temp/`, never in the project root.

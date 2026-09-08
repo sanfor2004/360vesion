@@ -36,7 +36,6 @@ const demoTour: Tour = {
   id: "cedar-house-demo",
   title: "Cedar House",
   description: "Contemporary villa · 4 bedrooms · 5 bathrooms",
-  visibility: "public",
   startSceneId: "living",
   scenes,
   floorPlan: {

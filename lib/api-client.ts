@@ -1,7 +1,7 @@
 /**
  * Typed fetch wrappers used by the studio + dashboard (client-side). Auth is the
  * The local studio has no login/session layer. All requests target the same
- * machine and persist to the project's SQLite database.
+ * machine and persist as local JSON project files.
  */
 import type { Tour, UploadResult } from "./types";
 
@@ -12,7 +12,7 @@ export async function fetchTour(id: string): Promise<Tour | null> {
   return res.json();
 }
 
-/** Create a new (draft) tour and return it (with its server-assigned id). */
+/** Create a new local tour and return it with its server-assigned id. */
 export async function createTour(input: Partial<Tour> = {}): Promise<Tour> {
   const res = await fetch("/api/tours", {
     method: "POST",
